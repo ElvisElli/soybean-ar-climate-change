@@ -58,13 +58,14 @@ TEST_N_SCENARIOS <- 1
 ## Sends an email after each scenario completes (and at the end).
 ## Requires the blastula package and a Gmail app password.
 ##
-## Setup (one time):
-##   install.packages("blastula")
+## Setup (one time, run in RStudio console):
+##   install.packages(c("blastula", "keyring"))
 ##   blastula::create_smtp_creds_key(
 ##     id       = "gmail",
-##     user     = "your.email@gmail.com",
-##     provider = "gmail"          # opens browser to set app password
+##     user     = "elvisfelipeelli@gmail.com",
+##     provider = "gmail"          # will prompt for Gmail app password
 ##   )
+## Gmail app password: myaccount.google.com → Security → 2-Step → App passwords
 ##
 ## Then set NOTIFY = TRUE and fill in your address below.
 NOTIFY       <- TRUE
@@ -470,10 +471,33 @@ tryCatch({
         unlink(par_abs)
 
         if (!is.null(sim) && nrow(sim) > 0) {
-          res_list[[k]] <- extract_sim_columns(sim, sc_row, grid_row)
-          n_ok <- n_ok + 1L
+          ## Log actual column names from APSIM on first cell of run
+          if (k == 1L && ci == 1L) {
+            debug_f <- file.path(local_tmp,
+                                 sprintf("debug_sc%02d_cols.txt", i))
+            writeLines(c(
+              paste("APSIM output columns for cell", j, "scenario", i),
+              paste(names(sim), collapse = ", "),
+              paste("nrow:", nrow(sim))
+            ), debug_f)
+          }
+          row_result <- tryCatch(
+            extract_sim_columns(sim, sc_row, grid_row),
+            error = function(e) {
+              err_msgs <<- c(err_msgs,
+                paste0("cell ", j, ": extract failed — ", e$message))
+              NULL
+            })
+          if (!is.null(row_result)) {
+            res_list[[k]] <- row_result
+            n_ok <- n_ok + 1L
+          } else {
+            n_fail <- n_fail + 1L
+          }
         } else {
           n_fail <- n_fail + 1L
+          err_msgs <- c(err_msgs,
+            paste0("cell ", j, ": sim NULL or 0 rows"))
         }
       }
 
@@ -501,8 +525,17 @@ tryCatch({
     }
 
     ## ── Append chunk summaries to progress log CSV ──────────────
+    ## Print any worker-level errors to the console for visibility
+    for (cs in chunk_summaries) {
+      if (inherits(cs, "error")) {
+        message(sprintf("[ERROR] Chunk failed entirely: %s", cs$message))
+      } else if (is.list(cs) && !is.null(cs$errors) && nchar(cs$errors) > 0) {
+        message(sprintf("[WARN] Chunk %d: %d ok / %d fail | %s",
+                        cs$chunk, cs$cells_ok, cs$cells_fail, cs$errors))
+      }
+    }
     log_rows <- dplyr::bind_rows(lapply(chunk_summaries, function(x) {
-      if (is.data.frame(x) || is.list(x)) as.data.frame(x) else NULL
+      if (!inherits(x, "error") && is.list(x)) as.data.frame(x) else NULL
     }))
     if (nrow(log_rows) > 0) {
       log_rows$timestamp <- format(Sys.time(), "%Y-%m-%d %H:%M:%S")

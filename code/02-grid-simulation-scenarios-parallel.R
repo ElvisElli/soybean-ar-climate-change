@@ -46,6 +46,16 @@ CHUNK_SIZE  <- 50    # cells per parallel task; tune: larger = less overhead
 DATE_START  <- "1985-01-01"
 DATE_END    <- "2024-12-31"
 
+## ── Test mode ────────────────────────────────────────────────
+## Set TEST_RUN <- TRUE to run a quick local test before the full run.
+## Uses a small random sample of cells, fewer years, and only the first
+## scenario — finishes in a few minutes so you can verify the setup.
+TEST_RUN        <- FALSE   # <-- flip to TRUE to test
+TEST_N_CELLS    <- 10      # number of grid cells to sample
+TEST_DATE_START <- "2015-01-01"
+TEST_DATE_END   <- "2020-12-31"
+TEST_N_SCENARIOS <- 1      # only run the first N scenarios
+
 ## ── Environment detection ────────────────────────────────────
 detect_env <- function() {
   host <- tolower(Sys.info()[["nodename"]])
@@ -158,6 +168,18 @@ sim.grid1       <- dplyr::filter(sim.grid, !is.na(cultivated))
 
 scenarios <- read_excel("intermediate-data/scenarios/soy-scenarios-10-24.xlsx",
                         sheet = "Sheet1") %>% as.data.frame()
+
+## ── Apply test limits ────────────────────────────────────────
+if (TEST_RUN) {
+  set.seed(42)
+  sim.grid1  <- sim.grid1[sample(nrow(sim.grid1), min(TEST_N_CELLS, nrow(sim.grid1))), ]
+  scenarios  <- scenarios[seq_len(min(TEST_N_SCENARIOS, nrow(scenarios))), ]
+  DATE_START <- TEST_DATE_START
+  DATE_END   <- TEST_DATE_END
+  CHUNK_SIZE <- max(1L, ceiling(nrow(sim.grid1) / 2L))  # 2 chunks max in test
+  message(sprintf("[TEST] Mode ON — %d cells | %s to %s | %d scenario(s)",
+                  nrow(sim.grid1), DATE_START, DATE_END, nrow(scenarios)))
+}
 
 message(sprintf("[INFO] Grid cells (cultivated): %d", nrow(sim.grid1)))
 message(sprintf("[INFO] Scenarios              : %d", nrow(scenarios)))

@@ -1,367 +1,530 @@
 ## ============================================================
-## Grid simulation script - soybean AR climate change
-## Auto-detects cloud vs. local Windows machine
-## Scales to all available cores (30 on new Windows desktop)
+## Grid simulation — soybean AR climate change
+## Auto-detects cloud vs. local Windows machine.
+## Scales to 30 cores on Windows desktop.
+##
+## Key design choices:
+##   - Cluster started ONCE, reused across all scenarios
+##   - Static data (grid, paths, helpers) exported once at startup
+##   - Per-chunk RDS checkpointing (resumable mid-scenario)
+##   - Resume via filename parsing (no re-reading saved RDS)
+##   - Each chunk returns a timing/error summary → progress log CSV
+##   - Summary inspection report written at the end
 ## ============================================================
 
 rm(list = ls())
 
-## ── Libraries ────────────────────────────────────────────────
-library(apsimx)
-library(ggplot2)
-library(stars)
-library(sf)
-library(readr)
-library(dplyr)
-library(readxl)
-library(lubridate)
-library(parallel)
+suppressPackageStartupMessages({
+  library(apsimx)
+  library(doParallel)
+  library(foreach)
+  library(dplyr)
+  library(readr)
+  library(readxl)
+  library(parallel)
+})
+
+## ── Settings ─────────────────────────────────────────────────
+CHUNK_SIZE  <- 50    # cells per parallel task; tune: larger = less overhead
+DATE_START  <- "1985-01-01"
+DATE_END    <- "2024-12-31"
 
 ## ── Environment detection ────────────────────────────────────
-## Determines paths and APSIM exe location automatically.
-## Add new machines by extending the hostname list below.
-
 detect_env <- function() {
   host <- tolower(Sys.info()[["nodename"]])
-  os   <- .Platform$OS.type          # "windows" | "unix"
-
-  ## ---- Known Windows desktops / laptops ----------------------
-  windows_machines <- list(
-
-    ## Elvis desktop (30-core Windows machine)
-    list(
-      pattern    = "efelli",          # partial hostname match
-      apsim_exe  = "C:/Users/efelli/AppData/Local/Programs/APSIM2025.3.7681.0/bin/Models.exe",
-      box_root   = "C:/Users/efelli/Box/_Projects/Scale-Sims/soybean-ar-climate-change/intermediate-data",
-      local_tmp  = "C:/temp/apsim-proc",
-      cores_use  = 28                 # leave 2 free for the OS
-    )
-    ## Add more Windows machines here as needed:
-    # list(pattern = "other-hostname", apsim_exe = ..., ...)
-  )
-
-  ## ---- Cloud / Linux environment -----------------------------
-  cloud_env <- list(
-    apsim_exe  = NULL,                # apsimx finds it automatically
-    box_root   = NULL,                # Box not mounted; data in project dir
-    local_tmp  = "/tmp/apsim-proc",
-    cores_use  = max(1, detectCores(logical = FALSE) - 1)
-  )
+  os   <- .Platform$OS.type
 
   if (os == "windows") {
-    for (m in windows_machines) {
-      if (grepl(m$pattern, host, fixed = TRUE)) {
-        message("[ENV] Detected Windows machine: ", host)
-        return(c(m, list(is_local = TRUE, is_windows = TRUE)))
-      }
+    ## Auto-detect latest APSIM version under %LOCALAPPDATA%\Programs
+    local_app  <- Sys.getenv("LOCALAPPDATA",
+                              file.path(Sys.getenv("USERPROFILE"), "AppData", "Local"))
+    apsim_dirs <- sort(grep("APSIM",
+                             list.dirs(file.path(local_app, "Programs"), recursive = FALSE),
+                             value = TRUE, ignore.case = TRUE))
+    apsim_exe  <- if (length(apsim_dirs) > 0)
+      file.path(tail(apsim_dirs, 1), "bin", "Models.exe")
+    else
+      "C:/Users/efelli/AppData/Local/Programs/APSIM2025.3.7681.0/bin/Models.exe"
+
+    ## Auto-detect Box folder — machine-agnostic.
+    ## Searches all likely Box mount points under the current user profile,
+    ## then falls back to scanning every user profile on the machine.
+    ## Works on any Windows computer (desktop, lab, laptop) without config.
+    user_home  <- Sys.getenv("USERPROFILE", path.expand("~"))
+    box_suffix <- file.path("_Projects", "Scale-Sims",
+                            "soybean-ar-climate-change", "intermediate-data")
+
+    ## Candidate roots to search (Box Drive and legacy Box Sync)
+    box_mounts <- c("Box", "Box Sync", "Box Drive")
+    candidates <- unlist(lapply(box_mounts, function(m)
+      file.path(user_home, m, box_suffix)))
+
+    ## Also scan other user profiles on the same machine (lab computer scenario)
+    users_dir  <- dirname(user_home)   # typically C:\Users
+    if (dir.exists(users_dir)) {
+      other_homes <- list.dirs(users_dir, recursive = FALSE)
+      candidates  <- c(candidates, unlist(lapply(other_homes, function(h)
+        unlist(lapply(box_mounts, function(m)
+          file.path(h, m, box_suffix))))))
     }
-    ## Unknown Windows machine — use conservative defaults
-    message("[ENV] Unknown Windows machine '", host, "' — using defaults")
+
+    box_root <- Filter(dir.exists, unique(candidates))
+
+    n_cores <- max(1L, parallel::detectCores(logical = FALSE) - 2L)
+    message("[ENV] Windows : ", host, " | cores: ", n_cores)
+    message("[ENV] APSIM   : ", apsim_exe)
+    message("[ENV] Box     : ", if (length(box_root) > 0) box_root[[1]] else "NOT FOUND")
+
     return(list(
-      apsim_exe  = NULL,
-      box_root   = NULL,
+      apsim_exe  = apsim_exe,
+      box_root   = if (length(box_root) > 0) box_root[[1]] else NULL,
       local_tmp  = "C:/temp/apsim-proc",
-      cores_use  = max(1, detectCores(logical = FALSE) - 2),
+      cores_use  = n_cores,
       is_local   = TRUE,
       is_windows = TRUE
     ))
   }
 
-  message("[ENV] Detected cloud/Linux environment: ", host)
-  return(c(cloud_env, list(is_local = FALSE, is_windows = FALSE)))
+  message("[ENV] Linux/cloud : ", host)
+  list(
+    apsim_exe  = NULL,
+    box_root   = NULL,
+    local_tmp  = "/tmp/apsim-proc",
+    cores_use  = max(1L, parallel::detectCores(logical = FALSE) - 1L),
+    is_local   = FALSE,
+    is_windows = FALSE
+  )
 }
 
 ENV <- detect_env()
 
-## ── APSIM exe path (Windows only) ───────────────────────────
-if (!is.null(ENV$apsim_exe) && file.exists(ENV$apsim_exe)) {
+## ── APSIM exe ────────────────────────────────────────────────
+if (!is.null(ENV$apsim_exe)) {
+  if (!file.exists(ENV$apsim_exe))
+    stop("[ERROR] APSIM not found: ", ENV$apsim_exe)
   apsimx_options(exe.path = ENV$apsim_exe)
-  message("[APSIM] Using exe: ", ENV$apsim_exe)
-} else {
-  message("[APSIM] Using system APSIM (auto-detected)")
 }
 
 ## ── Data paths ───────────────────────────────────────────────
-## On local Windows: weather & soil live in Box.
-## On cloud:        weather & soil live inside the project dir.
+intermediate_data <- if (ENV$is_local && !is.null(ENV$box_root))
+  ENV$box_root else normalizePath("intermediate-data", mustWork = FALSE)
 
-if (ENV$is_local && !is.null(ENV$box_root)) {
-  weather_path <- file.path(ENV$box_root, "weather")
-  soil_path    <- file.path(ENV$box_root, "soil")
-} else {
-  weather_path <- file.path("intermediate-data", "weather")
-  soil_path    <- file.path("intermediate-data", "soil")
-}
+weather_path   <- normalizePath(file.path(intermediate_data, "weather"), mustWork = FALSE)
+soil_path      <- normalizePath(file.path(intermediate_data, "soil"),    mustWork = FALSE)
+checkpoint_dir <- normalizePath("intermediate-data/sim-chunks",          mustWork = FALSE)
+local_tmp      <- normalizePath(ENV$local_tmp,                           mustWork = FALSE)
+log_file       <- normalizePath("intermediate-data/sim-run-log.csv",     mustWork = FALSE)
 
-weather_path <- normalizePath(weather_path, mustWork = FALSE)
-soil_path    <- normalizePath(soil_path,    mustWork = FALSE)
-crop_path    <- normalizePath("intermediate-data/crop-output", mustWork = FALSE)
-local_tmp    <- normalizePath(ENV$local_tmp, mustWork = FALSE)
+message("[PATHS] Weather  : ", weather_path)
+message("[PATHS] Soil     : ", soil_path)
+message("[PATHS] Chunks   : ", checkpoint_dir)
+message("[PATHS] Tmp      : ", local_tmp)
+message("[PATHS] Log      : ", log_file)
 
-message("[PATHS] Weather : ", weather_path)
-message("[PATHS] Soil    : ", soil_path)
-message("[PATHS] Output  : ", crop_path)
-message("[PATHS] Tmp dir : ", local_tmp)
+for (d in c(local_tmp, checkpoint_dir))
+  dir.create(d, recursive = TRUE, showWarnings = FALSE)
 
-## ── Create required directories ──────────────────────────────
-for (d in c(local_tmp, crop_path)) {
-  if (!dir.exists(d)) {
-    dir.create(d, recursive = TRUE)
-    message("[DIR] Created: ", d)
-  }
-}
+## ── Validate input data directories ─────────────────────────
+if (!dir.exists(weather_path))
+  stop("[ERROR] Weather directory not found: ", weather_path)
+if (!dir.exists(soil_path))
+  stop("[ERROR] Soil directory not found: ", soil_path)
+
+n_met <- length(list.files(weather_path, "\\.met$"))
+n_rds <- length(list.files(soil_path,    "\\.rds$"))
+message(sprintf("[CHECK] Weather files: %d | Soil files: %d", n_met, n_rds))
 
 ## ── Load grid & scenarios ────────────────────────────────────
-sim.grid <- readRDS("intermediate-data/sim-grid.rds")
+sim.grid        <- readRDS("intermediate-data/sim-grid.rds")
 sim.grid$cellid <- seq_len(nrow(sim.grid))
-sim.grid1 <- sim.grid %>% filter(!is.na(cultivated))
+sim.grid1       <- dplyr::filter(sim.grid, !is.na(cultivated))
 
 scenarios <- read_excel("intermediate-data/scenarios/soy-scenarios-10-24.xlsx",
-                        sheet = "Sheet1") %>%
-  as.data.frame()
+                        sheet = "Sheet1") %>% as.data.frame()
 
-message("[INFO] Grid cells (cultivated): ", nrow(sim.grid1))
-message("[INFO] Scenarios              : ", nrow(scenarios))
-message("[INFO] Cores to use           : ", ENV$cores_use)
+message(sprintf("[INFO] Grid cells (cultivated): %d", nrow(sim.grid1)))
+message(sprintf("[INFO] Scenarios              : %d", nrow(scenarios)))
+message(sprintf("[INFO] Cores                  : %d", ENV$cores_use))
+message(sprintf("[INFO] Chunk size             : %d", CHUNK_SIZE))
+message(sprintf("[INFO] Estimated chunks/sc    : %d",
+                ceiling(nrow(sim.grid1) / CHUNK_SIZE)))
 
-## ── Copy base APSIM file ─────────────────────────────────────
-## The project has a folder called "processed data" (with a space)
-base_apsimx <- normalizePath("processed data/_soybean-10-24-25.apsimx",
-                              mustWork = FALSE)
-
-## fallback — try without space (in case folder was renamed)
-if (!file.exists(base_apsimx)) {
-  base_apsimx <- normalizePath("processed-data/_soybean-10-24-25.apsimx",
-                                mustWork = FALSE)
-}
-
-if (!file.exists(base_apsimx)) {
-  stop("[ERROR] Cannot find base APSIM file. Expected: ", base_apsimx)
-}
+## ── Copy base template & set clock ───────────────────────────
+base_apsimx <- normalizePath("processed data/_soybean-10-24-25.apsimx", mustWork = FALSE)
+if (!file.exists(base_apsimx))
+  base_apsimx <- normalizePath("processed-data/_soybean-10-24-25.apsimx", mustWork = FALSE)
+if (!file.exists(base_apsimx))
+  stop("[ERROR] Base APSIM template not found: ", base_apsimx)
 
 template_file <- file.path(local_tmp, "grid-simulation-file.apsimx")
 file.copy(base_apsimx, template_file, overwrite = TRUE)
 
-## ── Set simulation clock once on the template ────────────────
-edit_apsimx(file = "grid-simulation-file.apsimx",
-            src.dir = local_tmp, wrt.dir = local_tmp,
-            node = "Clock", parm = "Start", value = "1985-01-01",
-            overwrite = TRUE)
-
-edit_apsimx(file = "grid-simulation-file.apsimx",
-            src.dir = local_tmp, wrt.dir = local_tmp,
-            node = "Clock", parm = "End", value = "2024-12-31",
-            overwrite = TRUE)
-
-## ── Helper: extract result columns ───────────────────────────
-extract_sim_columns <- function(sim, scenarios, i, sim.grid, j) {
-  data.frame(
-    cultivar        = scenarios$cultivar[i],
-    sowing          = scenarios$sowing[i],
-    scenario        = scenarios$scenario[i],
-    climate.control = scenarios$climate.control[i],
-    co2             = scenarios$co2[i],
-    rowSpacing      = scenarios$RowSpacing[i],
-    date            = sim$Date,
-    EmergenceDAS                   = sim$EmergenceDAS,
-    FloweringDAS                   = sim$FloweringDAS,
-    SeedFillingDAS                 = sim$SeedFillingDAS,
-    MaturityDAS                    = sim$MaturityDAS,
-    CumRadiationInterceptionOnGreen = sim$CumRadiationInterceptionOnGreen,
-    Yield_kgha                     = sim$Yield_kgha,
-    biomass_kgha                   = sim$biomass_kgha,
-    SeasonRain                     = sim$SeasonRain,
-    SeasonRadn                     = sim$SeasonRadn,
-    SeasonMaxt                     = sim$SeasonMaxt,
-    SeasonMint                     = sim$SeasonMint,
-    SeasonMeanT                    = sim$SeasonMeanT,
-    BloomingSeasonMaxt             = sim$BloomingSeasonMaxt,
-    Silking_RUE_Temp               = sim$Silking_RUE_Temp,
-    Silking_Supply_Demand_Ratio    = sim$Silking_Supply_Demand_Ratio,
-    swhc_6in                       = sim$swhc_6in,
-    swhc_12in                      = sim$swhc_12in,
-    swhc_24in                      = sim$swhc_24in,
-    Crop_ET                        = sim$Crop_ET,
-    WDrainage                      = sim$WDrainage,
-    WRunoff                        = sim$WRunoff,
-    sWUE                           = sim$sWUE
-  )
+for (parm_val in list(list("Start", DATE_START), list("End", DATE_END))) {
+  edit_apsimx(file = "grid-simulation-file.apsimx",
+              src.dir = local_tmp, wrt.dir = local_tmp,
+              node = "Clock", parm = parm_val[[1]], value = parm_val[[2]],
+              overwrite = TRUE, verbose = FALSE)
 }
 
-## ── KL / XF crop root parameters ─────────────────────────────
+## ── Root parameters (depth-decay) ────────────────────────────
 KL_VEC <- c(0.08,0.08,0.08,0.08,0.07,0.07,0.07,0.07,
             0.06,0.06,0.06,0.06,0.05,0.05,0.04,0.04,
             0.03,0.03,0.02,0.02)
 XF_VEC <- c(1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0)
 
-## ── Main simulation loop ─────────────────────────────────────
-final.df <- vector("list", nrow(scenarios))
-
-for (i in seq_len(nrow(scenarios))) {
-
-  cat("\n====================================================\n")
-  cat("Scenario", i, "/", nrow(scenarios), ":", scenarios$scenario[i],
-      "| CO2 =", scenarios$co2[i], "\n")
-  cat("====================================================\n")
-
-  ## -- Edit scenario parameters on the shared template --------
-  parm_edits <- list(
-    list(parm.path = ".Simulations.Simulation.Field.SowSoybean.CultivarName",
-         value = scenarios[i, "cultivar"]),
-    list(parm.path = ".Simulations.Simulation.Field.SowSoybean.SowDate",
-         value = scenarios[i, "sowing"]),
-    list(parm.path = ".Simulations.Simulation.Field.ClimateController.EnableDate",
-         value = scenarios[i, "climate.control"]),
-    list(parm.path = ".Simulations.Simulation.Field.SowSoybean.RowSpacing",
-         value = scenarios[i, "RowSpacing"]),
-    list(parm.path = ".Simulations.Simulation.Field.CO2.CO2",
-         value = scenarios[i, "co2"])
+## ── Helper: assemble result columns ──────────────────────────
+## Uses cbind (fast) instead of merge() to attach grid metadata.
+extract_sim_columns <- function(sim, sc_row, grid_row) {
+  sc_cols <- data.frame(
+    cultivar         = sc_row$cultivar,
+    sowing           = sc_row$sowing,
+    scenario         = sc_row$scenario,
+    climate.control  = sc_row$climate.control,
+    co2              = sc_row$co2,
+    rowSpacing       = sc_row$RowSpacing
   )
-
-  for (pe in parm_edits) {
-    edit_apsimx(file = "grid-simulation-file.apsimx",
-                src.dir = local_tmp, wrt.dir = local_tmp,
-                node = "Other",
-                parm.path = pe$parm.path,
-                value = pe$value,
-                verbose = FALSE, overwrite = TRUE)
-  }
-
-  ## -- Cluster setup ------------------------------------------
-  ncores <- min(ENV$cores_use, detectCores(logical = FALSE))
-  cat(sprintf("[INFO] Starting cluster with %d workers\n", ncores))
-  cl <- makeCluster(ncores, outfile = file.path(local_tmp, "log.txt"))
-
-  scenario.df <- tryCatch({
-
-    ## Load apsimx on workers; set exe path if needed
-    if (!is.null(ENV$apsim_exe) && file.exists(ENV$apsim_exe)) {
-      exe_path <- ENV$apsim_exe
-      clusterEvalQ(cl, {
-        library(apsimx)
-        apsimx_options(exe.path = exe_path)
-      })
-    } else {
-      clusterEvalQ(cl, library(apsimx))
-    }
-
-    ## Export what workers need
-    clusterExport(cl, c(
-      "sim.grid", "scenarios", "i",
-      "local_tmp", "weather_path", "soil_path", "crop_path",
-      "KL_VEC", "XF_VEC",
-      "extract_sim_columns"
-    ))
-
-    ## -- Parallel cell loop -----------------------------------
-    parLapply(cl, seq_len(nrow(sim.grid)), function(j) {
-
-      if (is.na(sim.grid[j, "cultivated"])) return(NULL)
-
-      ## Progress ticker (visible in log.txt)
-      if (j %% 100 == 0)
-        cat(sprintf("[Worker] Cell %d / %d | Scenario %d (%s)\n",
-                    j, nrow(sim.grid), i, scenarios$scenario[i]))
-
-      ## -- Load soil ------------------------------------------
-      soil_file <- file.path(soil_path, paste0(j, ".rds"))
-      soil.result <- try(readRDS(soil_file), silent = TRUE)
-
-      if (inherits(soil.result, "try-error") ||
-          !is.list(soil.result) || length(soil.result) < 1 ||
-          !is.list(soil.result[[1]]) || length(soil.result[[1]]) < 1 ||
-          !inherits(soil.result[[1]][[1]], "soil_profile")) {
-        return(NULL)
-      }
-
-      soils <- soil.result[[1]][[1]]
-
-      ## KSAT exponential decay (prevents excessive deep drainage)
-      KS_max <- max(soils$soil$KS, na.rm = TRUE)
-      fracs   <- exp(seq(0, log(0.0001), length.out = length(soils$soil$KS)))
-      soils$soil$KS <- KS_max * fracs
-
-      soils <- apsimx:::fix_apsimx_soil_profile(soils, verbose = FALSE)
-      soils$initialwater <- initialwater_parms(
-        Depth         = soils$soil$Depth,
-        Thickness     = soils$soil$Thickness,
-        InitialValues = soils$soil$DUL
-      )
-      soils$crops <- c("Soybean", "Wheat", "Maize")
-
-      ## -- Per-worker APSIM file (no race conditions) ---------
-      par_file <- paste0("par-sim-", j, ".apsimx")
-
-      file.copy(file.path(local_tmp, "grid-simulation-file.apsimx"),
-                file.path(local_tmp, par_file),
-                overwrite = TRUE)
-
-      edit_apsimx_replace_soil_profile(
-        file = par_file, src.dir = local_tmp, wrt.dir = local_tmp,
-        soil.profile = soils, verbose = FALSE, overwrite = TRUE
-      )
-
-      edit_apsimx(file = par_file, src.dir = local_tmp, wrt.dir = local_tmp,
-                  node = "Soil", soil.child = "Physical",
-                  parm = "KL", value = KL_VEC,
-                  verbose = FALSE, overwrite = TRUE)
-
-      edit_apsimx(file = par_file, src.dir = local_tmp, wrt.dir = local_tmp,
-                  node = "Soil", soil.child = "Physical",
-                  parm = "XF", value = XF_VEC,
-                  verbose = FALSE, overwrite = TRUE)
-
-      ## Weather
-      edit_apsimx(file = par_file, src.dir = local_tmp, wrt.dir = local_tmp,
-                  node = "Weather",
-                  value = file.path(weather_path, paste0(j, ".met")),
-                  overwrite = TRUE, verbose = FALSE)
-
-      ## -- Run APSIM ------------------------------------------
-      sim <- try(apsimx(file = par_file, src.dir = local_tmp,
-                        cleanup = TRUE), silent = TRUE)
-
-      if (inherits(sim, "try-error")) {
-        cat(sprintf("[Worker] APSIM error at cell %d scenario %d\n", j, i))
-        return(NULL)
-      }
-
-      ## -- Assemble result row --------------------------------
-      ans <- extract_sim_columns(sim, scenarios, i, sim.grid, j)
-      ans <- merge(sim.grid[j, ], ans)
-
-      ## Write per-cell CSV checkpoint
-      out_csv <- file.path(crop_path,
-                           paste0(j, "_", scenarios$scenario[i], ".csv"))
-      readr::write_csv(ans, out_csv)
-
-      file.remove(file.path(local_tmp, par_file))
-      return(ans)
-    })
-
-  }, error = function(e) {
-    message("[ERROR] Cluster job failed for scenario ", i, ": ", e$message)
-    list()
-  }, finally = {
-    stopCluster(cl)
-  })
-
-  ## -- Aggregate scenario results -----------------------------
-  scenario.df <- Filter(Negate(is.null), scenario.df)
-  scenario.df <- do.call(rbind, scenario.df)
-  final.df[[i]] <- scenario.df
-
-  ## Checkpoint RDS after each scenario
-  saveRDS(do.call(rbind, Filter(Negate(is.null), final.df)),
-          "intermediate-data/simulated-scenarios-df-checkpoint.rds")
-
-  cat("[INFO] Scenario", i, "complete.",
-      if (!is.null(scenario.df)) nrow(scenario.df) else 0, "rows saved.\n")
+  sim_cols <- sim[, intersect(names(sim), c(
+    "Date",
+    "EmergenceDAS", "FloweringDAS", "SeedFillingDAS", "MaturityDAS",
+    "CumRadiationInterceptionOnGreen",
+    "Yield_kgha", "biomass_kgha",
+    "SeasonRain", "SeasonRadn",
+    "SeasonMaxt", "SeasonMint", "SeasonMeanT", "BloomingSeasonMaxt",
+    "Silking_RUE_Temp", "Silking_Supply_Demand_Ratio",
+    "swhc_6in", "swhc_12in", "swhc_24in",
+    "Crop_ET", "WDrainage", "WRunoff", "sWUE"
+  )), drop = FALSE]
+  cbind(grid_row[rep(1L, nrow(sim)), , drop = FALSE],
+        sc_cols[rep(1L, nrow(sim)), , drop = FALSE],
+        sim_cols,
+        row.names = NULL)
 }
 
+## ── Cluster — started ONCE, all scenarios share it ───────────
+n_workers <- min(ENV$cores_use, nrow(sim.grid1))
+cat(sprintf("\n[CLUSTER] Starting %d workers (PSOCK)\n", n_workers))
+
+cl <- makeCluster(n_workers, type = "PSOCK",
+                  outfile = file.path(local_tmp, "worker-log.txt"))
+
+tryCatch({
+  registerDoParallel(cl)
+
+  ## ── Export STATIC data once — never re-exported per scenario ──
+  clusterExport(cl, c("ENV", "KL_VEC", "XF_VEC", "extract_sim_columns",
+                       "local_tmp", "weather_path", "soil_path", "checkpoint_dir"),
+                envir = environment())
+
+  ## Load packages + set APSIM exe on all workers
+  clusterEvalQ(cl, {
+    suppressPackageStartupMessages({
+      library(apsimx)
+      library(dplyr)
+    })
+    if (!is.null(ENV$apsim_exe) && file.exists(ENV$apsim_exe))
+      apsimx_options(exe.path = ENV$apsim_exe)
+  })
+
+  ## ── Scenario loop ───────────────────────────────────────────
+  final.df    <- vector("list", nrow(scenarios))
+  run_started <- Sys.time()
+
+  for (i in seq_len(nrow(scenarios))) {
+    sc      <- scenarios[i, ]
+    sc_t0   <- proc.time()[["elapsed"]]
+
+    cat(sprintf("\n====================================================\n"))
+    cat(sprintf("Scenario %d / %d : %-30s | CO2 = %s | %s\n",
+                i, nrow(scenarios), sc$scenario, sc$co2,
+                format(Sys.time(), "%H:%M:%S")))
+    cat(sprintf("====================================================\n"))
+
+    ## ── Edit scenario parameters on the shared template ────────
+    parm_edits <- list(
+      list(".Simulations.Simulation.Field.SowSoybean.CultivarName",   sc$cultivar),
+      list(".Simulations.Simulation.Field.SowSoybean.SowDate",        sc$sowing),
+      list(".Simulations.Simulation.Field.ClimateController.EnableDate", sc$climate.control),
+      list(".Simulations.Simulation.Field.SowSoybean.RowSpacing",     sc$RowSpacing),
+      list(".Simulations.Simulation.Field.CO2.CO2",                   sc$co2)
+    )
+    for (pe in parm_edits)
+      edit_apsimx(file = "grid-simulation-file.apsimx",
+                  src.dir = local_tmp, wrt.dir = local_tmp,
+                  node = "Other", parm.path = pe[[1]], value = pe[[2]],
+                  verbose = FALSE, overwrite = TRUE)
+
+    ## ── Resume: find done cells from chunk filenames ────────────
+    ## Filename: chunk_sc01_ck0042_<first_cellid>.rds
+    ## Avoids re-reading every saved RDS — just parse filenames.
+    chunk_pattern <- sprintf("^chunk_sc%02d_ck", i)
+    done_files    <- list.files(checkpoint_dir, pattern = chunk_pattern)
+    done_cells    <- as.integer(sub("^chunk_sc\\d+_ck\\d+_(\\d+)\\.rds$", "\\1", done_files))
+
+    ## Find all cells in those chunks (need to read to get full cellid list)
+    if (length(done_files) > 0) {
+      done_cells_full <- unlist(lapply(
+        file.path(checkpoint_dir, done_files),
+        function(f) readRDS(f)$cellid
+      ))
+    } else {
+      done_cells_full <- integer(0)
+    }
+
+    todo_rows <- sim.grid1[!sim.grid1$cellid %in% done_cells_full, ]
+    cat(sprintf("[INFO] Done: %d cells (%d chunks) | Remaining: %d cells\n",
+                length(done_cells_full), length(done_files), nrow(todo_rows)))
+
+    if (nrow(todo_rows) == 0) {
+      cat("[INFO] Scenario complete — loading from saved chunks.\n")
+      final.df[[i]] <- dplyr::bind_rows(lapply(
+        file.path(checkpoint_dir,
+                  list.files(checkpoint_dir,
+                             pattern = sprintf("^chunk_sc%02d_", i))),
+        readRDS))
+      next
+    }
+
+    ## ── Split remaining cells into chunks ───────────────────────
+    chunk_idx <- ceiling(seq_len(nrow(todo_rows)) / CHUNK_SIZE)
+    chunks    <- split(seq_len(nrow(todo_rows)), chunk_idx)
+    ## Offset chunk numbering so resumed runs don't collide with saved filenames
+    ci_offset <- length(done_files)
+
+    ## ── Export DYNAMIC data (changes each scenario) ─────────────
+    sc_row <- sc
+    clusterExport(cl,
+      c("todo_rows", "sc_row", "i", "chunks", "ci_offset"),
+      envir = environment())
+
+    ## ── Parallel chunk processing ───────────────────────────────
+    ## Returns one summary row per chunk for the progress log.
+    chunk_summaries <- foreach(
+      ci             = seq_along(chunks),
+      .errorhandling = "pass"   # packages already loaded via clusterEvalQ
+    ) %dopar% {
+
+      t0       <- proc.time()[["elapsed"]]
+      idx      <- chunks[[ci]]
+      sub_rows <- todo_rows[idx, ]
+      n_cells  <- nrow(sub_rows)
+      res_list <- vector("list", n_cells)
+      n_ok     <- 0L
+      n_fail   <- 0L
+      err_msgs <- character(0)
+
+      for (k in seq_len(n_cells)) {
+        j        <- sub_rows$cellid[k]
+        grid_row <- sub_rows[k, , drop = FALSE]
+
+        if (k == 1L || k %% 100L == 0L)
+          cat(sprintf("[Worker] Sc %d | Chunk %d | Cell %d/%d\n",
+                      i, ci + ci_offset, k, n_cells))
+
+        ## ── Load soil ─────────────────────────────────────────
+        soil_file   <- file.path(soil_path, paste0(j, ".rds"))
+        soil.result <- tryCatch(readRDS(soil_file), error = function(e) NULL)
+
+        valid_soil <- !is.null(soil.result) &&
+          is.list(soil.result) && length(soil.result) >= 1 &&
+          is.list(soil.result[[1]]) && length(soil.result[[1]]) >= 1 &&
+          inherits(soil.result[[1]][[1]], "soil_profile")
+
+        if (!valid_soil) {
+          n_fail <- n_fail + 1L
+          err_msgs <- c(err_msgs, paste0("cell ", j, ": soil load failed"))
+          next
+        }
+
+        soils <- soil.result[[1]][[1]]
+
+        ## KSAT exponential decay (prevents excessive deep drainage)
+        KS_max        <- max(soils$soil$KS, na.rm = TRUE)
+        fracs          <- exp(seq(0, log(1e-4), length.out = length(soils$soil$KS)))
+        soils$soil$KS  <- KS_max * fracs
+        soils           <- apsimx:::fix_apsimx_soil_profile(soils, verbose = FALSE)
+        soils$initialwater <- initialwater_parms(
+          Depth = soils$soil$Depth, Thickness = soils$soil$Thickness,
+          InitialValues = soils$soil$DUL)
+        soils$crops <- c("Soybean", "Wheat", "Maize")
+
+        ## Truncate KL/XF to actual layer count
+        n_lay <- nrow(soils$soil)
+        KL    <- KL_VEC[seq_len(min(n_lay, length(KL_VEC)))]
+        XF    <- XF_VEC[seq_len(min(n_lay, length(XF_VEC)))]
+
+        ## ── Build per-cell APSIM file (avoids race conditions) ──
+        par_file <- paste0("par-sim-", j, ".apsimx")
+        par_abs  <- file.path(local_tmp, par_file)
+
+        built <- tryCatch({
+          file.copy(file.path(local_tmp, "grid-simulation-file.apsimx"),
+                    par_abs, overwrite = TRUE)
+          edit_apsimx_replace_soil_profile(
+            file = par_file, src.dir = local_tmp, wrt.dir = local_tmp,
+            soil.profile = soils, verbose = FALSE, overwrite = TRUE)
+          edit_apsimx(par_file, local_tmp, local_tmp,
+            node = "Soil", soil.child = "Physical",
+            parm = "KL", value = KL, verbose = FALSE, overwrite = TRUE)
+          edit_apsimx(par_file, local_tmp, local_tmp,
+            node = "Soil", soil.child = "Physical",
+            parm = "XF", value = XF, verbose = FALSE, overwrite = TRUE)
+          edit_apsimx(par_file, local_tmp, local_tmp,
+            node = "Weather",
+            value = normalizePath(file.path(weather_path, paste0(j, ".met")),
+                                  mustWork = FALSE),
+            overwrite = TRUE, verbose = FALSE)
+          TRUE
+        }, error = function(e) {
+          err_msgs <<- c(err_msgs, paste0("cell ", j, ": build failed — ", e$message))
+          FALSE
+        })
+
+        if (!built) { unlink(par_abs); n_fail <- n_fail + 1L; next }
+
+        ## ── Run APSIM ───────────────────────────────────────────
+        sim <- tryCatch(
+          apsimx(file = par_file, src.dir = local_tmp, cleanup = TRUE),
+          error = function(e) {
+            err_msgs <<- c(err_msgs, paste0("cell ", j, ": APSIM error — ", e$message))
+            NULL
+          })
+        unlink(par_abs)
+
+        if (!is.null(sim) && nrow(sim) > 0) {
+          res_list[[k]] <- extract_sim_columns(sim, sc_row, grid_row)
+          n_ok <- n_ok + 1L
+        } else {
+          n_fail <- n_fail + 1L
+        }
+      }
+
+      ## ── Save chunk checkpoint ────────────────────────────────
+      chunk_df <- dplyr::bind_rows(Filter(Negate(is.null), res_list))
+      if (nrow(chunk_df) > 0) {
+        out_rds <- file.path(checkpoint_dir,
+                             sprintf("chunk_sc%02d_ck%04d_%d.rds",
+                                     i, ci + ci_offset, sub_rows$cellid[1L]))
+        saveRDS(chunk_df, out_rds)
+      }
+
+      ## Return summary for progress log
+      list(
+        scenario    = sc_row$scenario,
+        sc_idx      = i,
+        co2         = sc_row$co2,
+        chunk       = ci + ci_offset,
+        cells_total = n_cells,
+        cells_ok    = n_ok,
+        cells_fail  = n_fail,
+        elapsed_sec = round(proc.time()[["elapsed"]] - t0, 1),
+        errors      = paste(err_msgs, collapse = "; ")
+      )
+    }
+
+    ## ── Append chunk summaries to progress log CSV ──────────────
+    log_rows <- dplyr::bind_rows(lapply(chunk_summaries, function(x) {
+      if (is.data.frame(x) || is.list(x)) as.data.frame(x) else NULL
+    }))
+    if (nrow(log_rows) > 0) {
+      log_rows$timestamp <- format(Sys.time(), "%Y-%m-%d %H:%M:%S")
+      write.table(log_rows, log_file, append = file.exists(log_file),
+                  sep = ",", row.names = FALSE,
+                  col.names = !file.exists(log_file))
+    }
+
+    ## ── Collect all chunks for this scenario ────────────────────
+    all_chunk_files <- file.path(checkpoint_dir,
+      list.files(checkpoint_dir, pattern = sprintf("^chunk_sc%02d_", i)))
+    scenario_df     <- dplyr::bind_rows(lapply(all_chunk_files, readRDS))
+    final.df[[i]]   <- scenario_df
+
+    sc_elapsed <- round(proc.time()[["elapsed"]] - sc_t0)
+    cat(sprintf("[INFO] Scenario %d complete: %d rows | %d cells | %.0f min\n",
+                i, nrow(scenario_df), dplyr::n_distinct(scenario_df$cellid),
+                sc_elapsed / 60))
+  }
+
+}, finally = {
+  stopCluster(cl)
+  cat("\n[CLUSTER] Stopped.\n")
+})
+
 ## ── Final save ───────────────────────────────────────────────
-final.df <- do.call(rbind, final.df)
+final.df <- dplyr::bind_rows(Filter(Negate(is.null), final.df))
 saveRDS(final.df, "intermediate-data/simulated-scenarios-df.rds")
 write_csv(final.df, "intermediate-data/simulated-scenarios-df.csv")
 
-cat("\n[DONE] Total rows in final dataset:", nrow(final.df), "\n")
+total_elapsed <- round(as.numeric(difftime(Sys.time(), run_started, units = "mins")), 1)
+
+cat(sprintf("\n[DONE] Rows: %d | Scenarios: %d | Cells: %d | Total time: %.1f min\n",
+            nrow(final.df),
+            dplyr::n_distinct(final.df$scenario),
+            dplyr::n_distinct(final.df$cellid),
+            total_elapsed))
+
+## ── Summary inspection report ────────────────────────────────
+tryCatch({
+  report_lines <- c(
+    "================================================================",
+    sprintf("SIMULATION RUN SUMMARY — %s", format(Sys.time(), "%Y-%m-%d %H:%M")),
+    "================================================================",
+    sprintf("Machine    : %s (%s)", Sys.info()[["nodename"]], .Platform$OS.type),
+    sprintf("Workers    : %d | Chunk size: %d", n_workers, CHUNK_SIZE),
+    sprintf("Total time : %.1f minutes", total_elapsed),
+    sprintf("Output     : intermediate-data/simulated-scenarios-df.rds"),
+    "",
+    "── Coverage by scenario ─────────────────────────────────────",
+    capture.output(
+      print(
+        final.df %>%
+          group_by(scenario, co2, cultivar, sowing) %>%
+          summarise(
+            cells   = dplyr::n_distinct(cellid),
+            years   = dplyr::n_distinct(date),
+            rows    = dplyr::n(),
+            yield_mean_kgha = round(mean(Yield_kgha, na.rm = TRUE), 0),
+            yield_sd_kgha   = round(sd(Yield_kgha,   na.rm = TRUE), 0),
+            .groups = "drop"),
+        n = 50
+      )
+    ),
+    "",
+    "── Progress log ─────────────────────────────────────────────",
+    if (file.exists(log_file)) {
+      log_summary <- read.csv(log_file)
+      capture.output(
+        print(
+          log_summary %>%
+            group_by(scenario, co2) %>%
+            summarise(
+              chunks       = dplyr::n(),
+              cells_ok     = sum(cells_ok),
+              cells_fail   = sum(cells_fail),
+              total_min    = round(sum(elapsed_sec) / 60, 1),
+              .groups = "drop"),
+          n = 50
+        )
+      )
+    } else "(log not found)",
+    "",
+    "── Missing cells check ──────────────────────────────────────",
+    capture.output({
+      expected_cells <- nrow(sim.grid1)
+      got_per_sc <- final.df %>%
+        group_by(scenario, co2) %>%
+        summarise(cells = dplyr::n_distinct(cellid), .groups = "drop") %>%
+        mutate(missing = expected_cells - cells,
+               pct_ok  = round(cells / expected_cells * 100, 1))
+      print(got_per_sc, n = 50)
+    }),
+    "================================================================"
+  )
+
+  report_path <- "intermediate-data/run-summary.txt"
+  writeLines(report_lines, report_path)
+  cat(sprintf("[REPORT] Summary written to %s\n", report_path))
+  cat(paste(report_lines, collapse = "\n"), "\n")
+
+}, error = function(e) {
+  message("[WARN] Could not write summary report: ", e$message)
+})

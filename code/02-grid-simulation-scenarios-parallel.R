@@ -48,13 +48,28 @@ DATE_END    <- "2024-12-31"
 
 ## ── Test mode ────────────────────────────────────────────────
 ## Set TEST_RUN <- TRUE to run a quick local test before the full run.
-## Uses a small random sample of cells, fewer years, and only the first
-## scenario — finishes in a few minutes so you can verify the setup.
-TEST_RUN        <- FALSE   # <-- flip to TRUE to test
-TEST_N_CELLS    <- 10      # number of grid cells to sample
-TEST_DATE_START <- "2015-01-01"
-TEST_DATE_END   <- "2020-12-31"
-TEST_N_SCENARIOS <- 1      # only run the first N scenarios
+TEST_RUN         <- FALSE   # <-- flip to TRUE to test
+TEST_N_CELLS     <- 10
+TEST_DATE_START  <- "2015-01-01"
+TEST_DATE_END    <- "2020-12-31"
+TEST_N_SCENARIOS <- 1
+
+## ── Notifications ────────────────────────────────────────────
+## Sends an email after each scenario completes (and at the end).
+## Requires the blastula package and a Gmail app password.
+##
+## Setup (one time):
+##   install.packages("blastula")
+##   blastula::create_smtp_creds_key(
+##     id       = "gmail",
+##     user     = "your.email@gmail.com",
+##     provider = "gmail"          # opens browser to set app password
+##   )
+##
+## Then set NOTIFY = TRUE and fill in your address below.
+NOTIFY       <- FALSE                    # <-- flip to TRUE to enable
+NOTIFY_TO    <- "eelli@uark.edu"         # destination (email or SMS gateway)
+NOTIFY_FROM  <- "your.gmail@gmail.com"   # must match the blastula credential
 
 ## ── Environment detection ────────────────────────────────────
 detect_env <- function() {
@@ -239,12 +254,37 @@ extract_sim_columns <- function(sim, sc_row, grid_row) {
         row.names = NULL)
 }
 
+## ── Notification helper ──────────────────────────────────────
+## Sends a progress email/SMS after each scenario.
+## SMS: use your carrier's email-to-text gateway as NOTIFY_TO, e.g.:
+##   AT&T    → 5011234567@txt.att.net
+##   Verizon → 5011234567@vtext.com
+##   T-Mobile→ 5011234567@tmomail.net
+send_notification <- function(subject, body) {
+  if (!NOTIFY) return(invisible(NULL))
+  tryCatch({
+    if (!requireNamespace("blastula", quietly = TRUE))
+      stop("blastula not installed")
+    email <- blastula::compose_email(body = blastula::md(body))
+    blastula::smtp_send(
+      email,
+      from       = NOTIFY_FROM,
+      to         = NOTIFY_TO,
+      subject    = subject,
+      credentials = blastula::creds_key("gmail")
+    )
+    message("[NOTIFY] Sent: ", subject)
+  }, error = function(e) {
+    message("[NOTIFY] Failed — ", e$message)
+  })
+}
+
 ## ── Cluster — started ONCE, all scenarios share it ───────────
 n_workers <- min(ENV$cores_use, nrow(sim.grid1))
 cat(sprintf("\n[CLUSTER] Starting %d workers (PSOCK)\n", n_workers))
 
 cl <- makeCluster(n_workers, type = "PSOCK",
-                  outfile = file.path(local_tmp, "worker-log.txt"))
+                  outfile = "")   # "" = print worker messages to RStudio console
 
 tryCatch({
   registerDoParallel(cl)
@@ -477,10 +517,32 @@ tryCatch({
     scenario_df     <- dplyr::bind_rows(lapply(all_chunk_files, readRDS))
     final.df[[i]]   <- scenario_df
 
-    sc_elapsed <- round(proc.time()[["elapsed"]] - sc_t0)
+    sc_elapsed   <- round(proc.time()[["elapsed"]] - sc_t0)
+    total_so_far <- round(as.numeric(difftime(Sys.time(), run_started, units = "mins")), 1)
+    sc_remaining <- nrow(scenarios) - i
+    eta_min      <- if (i > 0) round(total_so_far / i * sc_remaining, 0) else NA
+
     cat(sprintf("[INFO] Scenario %d complete: %d rows | %d cells | %.0f min\n",
                 i, nrow(scenario_df), dplyr::n_distinct(scenario_df$cellid),
                 sc_elapsed / 60))
+    cat(sprintf("[INFO] Total elapsed: %.1f min | Scenarios left: %d | ETA: ~%d min\n",
+                total_so_far, sc_remaining, eta_min))
+
+    send_notification(
+      subject = sprintf("Soybean sim: scenario %d/%d done (%s)",
+                        i, nrow(scenarios), sc$scenario),
+      body    = paste0(
+        "**Scenario ", i, "/", nrow(scenarios), " complete**\n\n",
+        "- Scenario : ", sc$scenario, " | CO2 = ", sc$co2, "\n",
+        "- Cells    : ", dplyr::n_distinct(scenario_df$cellid), "\n",
+        "- Rows     : ", nrow(scenario_df), "\n",
+        "- Time this scenario : ", round(sc_elapsed / 60, 1), " min\n",
+        "- Total elapsed      : ", total_so_far, " min\n",
+        "- Scenarios remaining: ", sc_remaining, "\n",
+        "- ETA (approx)       : ~", eta_min, " min\n\n",
+        "Machine: ", Sys.info()[["nodename"]]
+      )
+    )
   }
 
 }, finally = {
@@ -500,6 +562,20 @@ cat(sprintf("\n[DONE] Rows: %d | Scenarios: %d | Cells: %d | Total time: %.1f mi
             dplyr::n_distinct(final.df$scenario),
             dplyr::n_distinct(final.df$cellid),
             total_elapsed))
+
+send_notification(
+  subject = sprintf("Soybean sim COMPLETE — %.0f min | %s",
+                    total_elapsed, Sys.info()[["nodename"]]),
+  body    = paste0(
+    "**All scenarios complete!**\n\n",
+    "- Total rows      : ", nrow(final.df), "\n",
+    "- Scenarios       : ", dplyr::n_distinct(final.df$scenario), "\n",
+    "- Cells simulated : ", dplyr::n_distinct(final.df$cellid), "\n",
+    "- Total time      : ", total_elapsed, " min\n",
+    "- Output          : intermediate-data/simulated-scenarios-df.rds\n\n",
+    "Machine: ", Sys.info()[["nodename"]]
+  )
+)
 
 ## ── Summary inspection report ────────────────────────────────
 tryCatch({

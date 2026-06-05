@@ -48,7 +48,7 @@ DATE_END    <- "2024-12-31"
 
 ## ── Test mode ────────────────────────────────────────────────
 ## Set TEST_RUN <- TRUE to run a quick local test before the full run.
-TEST_RUN         <- FALSE   # <-- flip to TRUE to test
+TEST_RUN         <- TRUE    # set back to FALSE for the full run
 TEST_N_CELLS     <- 10
 TEST_DATE_START  <- "2015-01-01"
 TEST_DATE_END    <- "2020-12-31"
@@ -67,9 +67,9 @@ TEST_N_SCENARIOS <- 1
 ##   )
 ##
 ## Then set NOTIFY = TRUE and fill in your address below.
-NOTIFY       <- FALSE                    # <-- flip to TRUE to enable
-NOTIFY_TO    <- "eelli@uark.edu"         # destination (email or SMS gateway)
-NOTIFY_FROM  <- "your.gmail@gmail.com"   # must match the blastula credential
+NOTIFY       <- TRUE
+NOTIFY_TO    <- "5157156541@vtext.com"   # Verizon SMS gateway
+NOTIFY_FROM  <- "elvisfelipeelli@gmail.com"
 
 ## ── Environment detection ────────────────────────────────────
 detect_env <- function() {

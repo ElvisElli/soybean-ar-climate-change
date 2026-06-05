@@ -14,6 +14,23 @@
 
 rm(list = ls())
 
+## ── Working directory — repo root ────────────────────────────
+## Works whether run via source() in RStudio or Rscript from command line.
+if (interactive() &&
+    requireNamespace("rstudioapi", quietly = TRUE) &&
+    rstudioapi::isAvailable()) {
+  doc <- rstudioapi::getActiveDocumentContext()$path
+  if (nchar(doc) > 0) {
+    setwd(dirname(doc))   # code/
+    setwd("..")           # repo root
+  }
+}
+if (!file.exists("intermediate-data/sim-grid.rds"))
+  stop("Working directory must be the repo root.\n",
+       "Current dir: ", getwd(), "\n",
+       "Run from RStudio with the script open, or:\n",
+       "  Rscript code/02-grid-simulation-scenarios-parallel.R")
+
 suppressPackageStartupMessages({
   library(apsimx)
   library(doParallel)

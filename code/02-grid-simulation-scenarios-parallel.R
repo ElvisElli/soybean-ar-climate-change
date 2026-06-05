@@ -32,7 +32,7 @@ detect_env <- function() {
     list(
       pattern    = "efelli",          # partial hostname match
       apsim_exe  = "C:/Users/efelli/AppData/Local/Programs/APSIM2025.3.7681.0/bin/Models.exe",
-      box_root   = "C:/Users/efelli/Box",
+      box_root   = "C:/Users/efelli/Box/_Projects/Scale-Sims/soybean-ar-climate-change/intermediate-data",
       local_tmp  = "C:/temp/apsim-proc",
       cores_use  = 28                 # leave 2 free for the OS
     )
@@ -86,10 +86,8 @@ if (!is.null(ENV$apsim_exe) && file.exists(ENV$apsim_exe)) {
 ## On cloud:        weather & soil live inside the project dir.
 
 if (ENV$is_local && !is.null(ENV$box_root)) {
-  weather_path <- file.path(ENV$box_root, "soybean-ar-climate-change",
-                            "intermediate-data", "weather")
-  soil_path    <- file.path(ENV$box_root, "soybean-ar-climate-change",
-                            "intermediate-data", "soil")
+  weather_path <- file.path(ENV$box_root, "weather")
+  soil_path    <- file.path(ENV$box_root, "soil")
 } else {
   weather_path <- file.path("intermediate-data", "weather")
   soil_path    <- file.path("intermediate-data", "soil")

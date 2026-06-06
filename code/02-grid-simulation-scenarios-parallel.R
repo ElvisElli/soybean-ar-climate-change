@@ -121,7 +121,6 @@ detect_env <- function() {
     return(list(
       apsim_exe  = apsim_exe,
       box_root   = if (length(box_root) > 0) box_root[[1]] else NULL,
-      local_tmp  = "C:/temp/apsim-proc",
       cores_use  = n_cores,
       is_local   = TRUE,
       is_windows = TRUE
@@ -132,7 +131,6 @@ detect_env <- function() {
   list(
     apsim_exe  = NULL,
     box_root   = NULL,
-    local_tmp  = "/tmp/apsim-proc",
     cores_use  = max(1L, parallel::detectCores(logical = FALSE) - 1L),
     is_local   = FALSE,
     is_windows = FALSE
@@ -155,17 +153,14 @@ intermediate_data <- if (ENV$is_local && !is.null(ENV$box_root))
 weather_path   <- normalizePath(file.path(intermediate_data, "weather"), mustWork = FALSE)
 soil_path      <- normalizePath(file.path(intermediate_data, "soil"),    mustWork = FALSE)
 checkpoint_dir <- normalizePath("intermediate-data/sim-chunks",          mustWork = FALSE)
-local_tmp      <- normalizePath(ENV$local_tmp,                           mustWork = FALSE)
 log_file       <- normalizePath("intermediate-data/sim-run-log.csv",     mustWork = FALSE)
 
 message("[PATHS] Weather  : ", weather_path)
 message("[PATHS] Soil     : ", soil_path)
 message("[PATHS] Chunks   : ", checkpoint_dir)
-message("[PATHS] Tmp      : ", local_tmp)
 message("[PATHS] Log      : ", log_file)
 
-for (d in c(local_tmp, checkpoint_dir))
-  dir.create(d, recursive = TRUE, showWarnings = FALSE)
+dir.create(checkpoint_dir, recursive = TRUE, showWarnings = FALSE)
 
 ## ── Validate input data directories ─────────────────────────
 if (!dir.exists(weather_path))
@@ -204,19 +199,22 @@ message(sprintf("[INFO] Chunk size             : %d", CHUNK_SIZE))
 message(sprintf("[INFO] Estimated chunks/sc    : %d",
                 ceiling(nrow(sim.grid1) / CHUNK_SIZE)))
 
-## ── Copy base template & set clock ───────────────────────────
+## ── Locate base template — apsim_dir is where all sim files live ─────────────
+## Using the template's own folder keeps everything in one place (no temp dir).
+## Per-cell subdirectories (cell-{id}/) are created here during the run.
 base_apsimx <- normalizePath("processed data/_soybean-10-24-25.apsimx", mustWork = FALSE)
 if (!file.exists(base_apsimx))
   base_apsimx <- normalizePath("processed-data/_soybean-10-24-25.apsimx", mustWork = FALSE)
 if (!file.exists(base_apsimx))
   stop("[ERROR] Base APSIM template not found: ", base_apsimx)
 
-template_file <- file.path(local_tmp, "grid-simulation-file.apsimx")
+apsim_dir     <- dirname(base_apsimx)          # e.g. "processed data/"
+template_file <- file.path(apsim_dir, "grid-simulation-file.apsimx")
 file.copy(base_apsimx, template_file, overwrite = TRUE)
 
 for (parm_val in list(list("Start", DATE_START), list("End", DATE_END))) {
   edit_apsimx(file = "grid-simulation-file.apsimx",
-              src.dir = local_tmp, wrt.dir = local_tmp,
+              src.dir = apsim_dir, wrt.dir = apsim_dir,
               node = "Clock", parm = parm_val[[1]], value = parm_val[[2]],
               overwrite = TRUE, verbose = FALSE)
 }
@@ -300,7 +298,7 @@ if (RUN_DIAGNOSTIC) {
     list(".Simulations.Simulation.Field.SowSoybean.RowSpacing",        sc$RowSpacing),
     list(".Simulations.Simulation.Field.CO2.CO2",                      sc$co2)
   ))
-    edit_apsimx("grid-simulation-file.apsimx", local_tmp, local_tmp,
+    edit_apsimx("grid-simulation-file.apsimx", apsim_dir, apsim_dir,
                 node = "Other", parm.path = pe[[1]], value = pe[[2]],
                 verbose = FALSE, overwrite = TRUE)
 
@@ -319,11 +317,11 @@ if (RUN_DIAGNOSTIC) {
   XF <- XF_VEC[seq_len(min(n_lay, length(XF_VEC)))]
 
   ## Build APSIM file in isolated directory (same pattern as production)
-  diag_dir  <- file.path(local_tmp, paste0("diag-cell-", j))
+  diag_dir  <- file.path(apsim_dir, paste0("diag-cell-", j))
   dir.create(diag_dir, showWarnings = FALSE, recursive = TRUE)
   diag_file <- "sim.apsimx"
   diag_abs  <- file.path(diag_dir, diag_file)
-  file.copy(file.path(local_tmp, "grid-simulation-file.apsimx"), diag_abs, overwrite = TRUE)
+  file.copy(file.path(apsim_dir, "grid-simulation-file.apsimx"), diag_abs, overwrite = TRUE)
   edit_apsimx_replace_soil_profile(diag_file, diag_dir, diag_dir,
     soil.profile = soils, verbose = FALSE, overwrite = TRUE)
   edit_apsimx(diag_file, diag_dir, diag_dir, node = "Soil",
@@ -376,7 +374,7 @@ tryCatch({
 
   ## ── Export STATIC data once — never re-exported per scenario ──
   clusterExport(cl, c("ENV", "KL_VEC", "XF_VEC", "extract_sim_columns",
-                       "local_tmp", "weather_path", "soil_path", "checkpoint_dir"),
+                       "apsim_dir", "weather_path", "soil_path", "checkpoint_dir"),
                 envir = environment())
 
   ## Load packages + set APSIM exe on all workers
@@ -413,7 +411,7 @@ tryCatch({
     )
     for (pe in parm_edits)
       edit_apsimx(file = "grid-simulation-file.apsimx",
-                  src.dir = local_tmp, wrt.dir = local_tmp,
+                  src.dir = apsim_dir, wrt.dir = apsim_dir,
                   node = "Other", parm.path = pe[[1]], value = pe[[2]],
                   verbose = FALSE, overwrite = TRUE)
 
@@ -520,13 +518,13 @@ tryCatch({
         ## Each cell gets its own folder so cleanup=TRUE in apsimx() can
         ## never touch another worker's .db file (that was the root cause
         ## of "no .db files" — one worker's cleanup deleted another's db).
-        cell_dir <- file.path(local_tmp, paste0("cell-", j))
+        cell_dir <- file.path(apsim_dir, paste0("cell-", j))
         dir.create(cell_dir, showWarnings = FALSE)
         par_file <- "sim.apsimx"
         par_abs  <- file.path(cell_dir, par_file)
 
         built <- tryCatch({
-          file.copy(file.path(local_tmp, "grid-simulation-file.apsimx"),
+          file.copy(file.path(apsim_dir, "grid-simulation-file.apsimx"),
                     par_abs, overwrite = TRUE)
           edit_apsimx_replace_soil_profile(
             file = par_file, src.dir = cell_dir, wrt.dir = cell_dir,
@@ -562,7 +560,7 @@ tryCatch({
         if (!is.null(sim) && nrow(sim) > 0) {
           ## Log actual column names from APSIM on first cell of run
           if (k == 1L && ci == 1L) {
-            debug_f <- file.path(local_tmp,
+            debug_f <- file.path(apsim_dir,
                                  sprintf("debug_sc%02d_cols.txt", i))
             writeLines(c(
               paste("APSIM output columns for cell", j, "scenario", i),

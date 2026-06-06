@@ -213,10 +213,11 @@ if (!file.exists(base_apsimx))
 ## On Windows, use C:/temp/apsim-soy/ to keep cell working dirs OUT of Box sync
 ## and the repo folder (Box Drive locks files during sync, causing APSIM to fail
 ## to write the .db file).  On Linux/cloud, intermediate-data/apsim-work/ is fine.
-apsim_dir <- if (ENV$is_windows)
+apsim_dir <- if (ENV$is_windows) {
   normalizePath("C:/temp/apsim-soy", mustWork = FALSE)
-else
+} else {
   normalizePath("intermediate-data/apsim-work", mustWork = FALSE)
+}
 dir.create(apsim_dir, recursive = TRUE, showWarnings = FALSE)
 
 template_file <- file.path(apsim_dir, "grid-simulation-file.apsimx")

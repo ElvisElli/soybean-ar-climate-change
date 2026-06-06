@@ -26,8 +26,15 @@ cat("Test cell    :", j, "\n")
 
 ## ── 2. APSIM exe ─────────────────────────────────────────────
 local_app  <- Sys.getenv("LOCALAPPDATA")
+search_roots <- c(
+  file.path(local_app, "Programs"),
+  "C:/Program Files",
+  "C:/Program Files (x86)"
+)
 apsim_dirs <- sort(grep("APSIM",
-  list.dirs(file.path(local_app, "Programs"), recursive = FALSE),
+  unlist(lapply(search_roots, function(d) {
+    if (dir.exists(d)) list.dirs(d, recursive = FALSE) else character(0)
+  })),
   value = TRUE, ignore.case = TRUE))
 apsim_exe  <- file.path(tail(apsim_dirs, 1), "bin", "Models.exe")
 

@@ -580,28 +580,32 @@ tryCatch({
           if (length(db_files) > 0) {
             apsim_msg <- tryCatch({
               con <- DBI::dbConnect(RSQLite::SQLite(), db_files[1])
-              on.exit(DBI::dbDisconnect(con), add = TRUE)
-              if ("_Messages" %in% DBI::dbListTables(con)) {
+              tbls <- DBI::dbListTables(con)
+              msg_out <- if ("_Messages" %in% tbls) {
                 msgs <- DBI::dbReadTable(con, "_Messages")
-                ## Keep only ERROR messages (MessageType == 0)
                 errs <- msgs[msgs$MessageType == 0, "Message", drop = TRUE]
-                if (length(errs) > 0)
-                  paste(substr(errs, 1, 200), collapse = " | ")
-                else
-                  "(no error messages in _Messages)"
+                if (length(errs) > 0) paste(substr(errs, 1, 300), collapse = " || ")
+                else "(APSIM ran — no errors in _Messages; Report may be empty)"
               } else {
-                "(no _Messages table — APSIM may not have started)"
+                "(no _Messages table)"
               }
+              DBI::dbDisconnect(con)
+              msg_out
             }, error = function(e) paste("db read error:", e$message))
           } else {
             apsim_msg <- if (!is.null(apsimx_error)) apsimx_error
                          else "(no .db created — APSIM did not run)"
           }
-          err_msgs <<- c(err_msgs,
-            paste0("cell ", j, ": APSIM msg — ", apsim_msg))
+          ## Print to worker console (visible in RStudio outfile="")
+          cat(sprintf("[DIAG] cell %d: %s\n", j, apsim_msg))
+          ## <- not <<- : we are already in the foreach worker scope
+          err_msgs <- c(err_msgs,
+            paste0("cell ", j, ": ", apsim_msg))
         }
-        ## Clean up cell directory
-        unlink(cell_dir, recursive = TRUE)
+        ## Clean up cell directory (keep on failure for first chunk only so
+        ## the user can inspect the .apsimx/.db manually if needed)
+        if (!(is.null(sim) || nrow(sim) == 0) || ci > 1)
+          unlink(cell_dir, recursive = TRUE)
 
         if (!is.null(sim) && nrow(sim) > 0) {
           ## Log actual column names from APSIM on first cell of run

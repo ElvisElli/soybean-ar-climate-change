@@ -183,24 +183,18 @@ message(sprintf("[INFO] Chunk size : %d | Estimated chunks/sc: %d",
                 CHUNK_SIZE, ceiling(nrow(sim.grid1) / CHUNK_SIZE)))
 
 ## ── APSIM working directory ───────────────────────────────────
-## Template lives in "processed data/" (space in name) — copy it to a
-## space-free working directory.  On Windows, keep it outside Box/repo
-## so Box Drive sync cannot lock files while APSIM writes the .db.
-base_apsimx <- normalizePath("processed data/_soybean-10-24-25.apsimx", mustWork = FALSE)
+base_apsimx <- normalizePath("processed-data/_soybean-10-24-25.apsimx", mustWork = FALSE)
 if (!file.exists(base_apsimx))
   stop("[ERROR] APSIM template not found: ", base_apsimx)
 
-## Use R's tempdir() on Windows — guaranteed writable, outside Box sync,
-## no admin privileges needed (unlike C:/temp which may be restricted).
-## On Linux, use intermediate-data/apsim-work/.
+## Cell working dirs live alongside the template in processed-data/.
+## On Linux use intermediate-data/apsim-work/ (keeps the repo cleaner).
 apsim_dir <- if (ENV$is_windows) {
-  file.path(tempdir(), "apsim-soy")
+  normalizePath("processed-data", mustWork = FALSE)
 } else {
   normalizePath("intermediate-data/apsim-work", mustWork = FALSE)
 }
 dir.create(apsim_dir, recursive = TRUE, showWarnings = FALSE)
-if (!dir.exists(apsim_dir))
-  stop("[ERROR] Could not create APSIM working directory: ", apsim_dir)
 message("[PATHS] APSIM work : ", apsim_dir)
 
 ## ── Root parameters (depth-decay) ────────────────────────────

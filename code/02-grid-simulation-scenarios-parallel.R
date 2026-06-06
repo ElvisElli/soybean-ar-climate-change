@@ -190,12 +190,17 @@ base_apsimx <- normalizePath("processed data/_soybean-10-24-25.apsimx", mustWork
 if (!file.exists(base_apsimx))
   stop("[ERROR] APSIM template not found: ", base_apsimx)
 
+## Use R's tempdir() on Windows — guaranteed writable, outside Box sync,
+## no admin privileges needed (unlike C:/temp which may be restricted).
+## On Linux, use intermediate-data/apsim-work/.
 apsim_dir <- if (ENV$is_windows) {
-  normalizePath("C:/temp/apsim-soy", mustWork = FALSE)
+  file.path(tempdir(), "apsim-soy")
 } else {
   normalizePath("intermediate-data/apsim-work", mustWork = FALSE)
 }
 dir.create(apsim_dir, recursive = TRUE, showWarnings = FALSE)
+if (!dir.exists(apsim_dir))
+  stop("[ERROR] Could not create APSIM working directory: ", apsim_dir)
 message("[PATHS] APSIM work : ", apsim_dir)
 
 ## ── Root parameters (depth-decay) ────────────────────────────
@@ -489,11 +494,30 @@ tryCatch({
         }
 
         ## ── Run APSIM ────────────────────────────────────
+        ## On first cell of each run, print pre-run diagnostics so we can
+        ## see cell_dir, whether the .apsimx was built, and what APSIM writes.
+        first_cell <- (k == 1L && ci == 1L)
+        if (first_cell) {
+          cat(sprintf("[PRE]  cell %d | cell_dir: %s | exists: %s\n",
+                      j, cell_dir, dir.exists(cell_dir)))
+          cat(sprintf("[PRE]  files in cell_dir: %s\n",
+                      paste(list.files(cell_dir), collapse = ", ")))
+          cat(sprintf("[PRE]  tempdir: %s\n", tempdir()))
+        }
+
         apsimx_err <- NULL
         sim <- tryCatch(
-          apsimx("sim.apsimx", src.dir = cell_dir, cleanup = TRUE, silent = TRUE),
+          apsimx("sim.apsimx", src.dir = cell_dir, cleanup = FALSE, silent = TRUE),
           error = function(e) { apsimx_err <<- e$message; NULL }
         )
+
+        if (first_cell) {
+          cat(sprintf("[POST] files in cell_dir after APSIM: %s\n",
+                      paste(list.files(cell_dir), collapse = ", ")))
+          cat(sprintf("[POST] sim rows: %s | apsimx_err: %s\n",
+                      if (is.null(sim)) "NULL" else nrow(sim),
+                      if (is.null(apsimx_err)) "none" else apsimx_err))
+        }
         unlink(cell_dir, recursive = TRUE)
 
         ## ── Handle failure ───────────────────────────────

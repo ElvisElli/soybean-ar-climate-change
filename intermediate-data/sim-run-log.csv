@@ -1,3 +1,3 @@
 "scenario","sc_idx","co2","chunk","cells_total","cells_ok","cells_fail","elapsed_sec","errors","timestamp"
-"baseline",1,350,1,5,5,0,31.7,"","2026-06-06 03:36:34"
-"baseline",1,350,2,5,5,0,31.9,"","2026-06-06 03:36:34"
+"baseline",1,350,1,5,5,0,44.7,"","2026-06-06 12:23:13"
+"baseline",1,350,2,5,5,0,44.6,"","2026-06-06 12:23:13"

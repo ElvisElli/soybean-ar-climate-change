@@ -60,7 +60,7 @@ TEST_N_SCENARIOS <- 1
 ##   )
 ##   (enter your Gmail App Password when prompted)
 NOTIFY    <- TRUE
-NOTIFY_TO <- "5157156541@vtext.com"        # Verizon SMS gateway
+NOTIFY_TO <- "eelli@uark.edu"
 NOTIFY_FROM <- "elvisfelipeelli@gmail.com"
 
 ## ── Diagnostic mode ──────────────────────────────────────────

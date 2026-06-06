@@ -280,6 +280,88 @@ send_notification <- function(subject, body) {
   })
 }
 
+## ── Single-cell diagnostic (run this BEFORE the full parallel run) ──────────
+## Runs one cell sequentially so you can see exactly what APSIM produces.
+## Set RUN_DIAGNOSTIC <- TRUE, source the script, check the output,
+## then set it back to FALSE.
+RUN_DIAGNOSTIC <- FALSE
+
+if (RUN_DIAGNOSTIC) {
+  cat("\n[DIAG] Running single-cell sequential test...\n")
+
+  sc   <- scenarios[1, ]
+  j    <- sim.grid1$cellid[1]
+
+  ## Apply scenario to template
+  for (pe in list(
+    list(".Simulations.Simulation.Field.SowSoybean.CultivarName",      sc$cultivar),
+    list(".Simulations.Simulation.Field.SowSoybean.SowDate",           sc$sowing),
+    list(".Simulations.Simulation.Field.ClimateController.EnableDate",  sc$climate.control),
+    list(".Simulations.Simulation.Field.SowSoybean.RowSpacing",        sc$RowSpacing),
+    list(".Simulations.Simulation.Field.CO2.CO2",                      sc$co2)
+  ))
+    edit_apsimx("grid-simulation-file.apsimx", local_tmp, local_tmp,
+                node = "Other", parm.path = pe[[1]], value = pe[[2]],
+                verbose = FALSE, overwrite = TRUE)
+
+  ## Load and prepare soil
+  soil.result <- readRDS(file.path(soil_path, paste0(j, ".rds")))
+  soils <- soil.result[[1]][[1]]
+  KS_max <- max(soils$soil$KS, na.rm = TRUE)
+  soils$soil$KS <- KS_max * exp(seq(0, log(1e-4), length.out = length(soils$soil$KS)))
+  soils <- apsimx:::fix_apsimx_soil_profile(soils, verbose = FALSE)
+  soils$initialwater <- initialwater_parms(
+    Depth = soils$soil$Depth, Thickness = soils$soil$Thickness,
+    InitialValues = soils$soil$DUL)
+  soils$crops <- c("Soybean", "Wheat", "Maize")
+  n_lay <- nrow(soils$soil)
+  KL <- KL_VEC[seq_len(min(n_lay, length(KL_VEC)))]
+  XF <- XF_VEC[seq_len(min(n_lay, length(XF_VEC)))]
+
+  ## Build APSIM file
+  diag_file <- paste0("diag-cell-", j, ".apsimx")
+  diag_abs  <- file.path(local_tmp, diag_file)
+  file.copy(file.path(local_tmp, "grid-simulation-file.apsimx"), diag_abs, overwrite = TRUE)
+  edit_apsimx_replace_soil_profile(diag_file, local_tmp, local_tmp,
+    soil.profile = soils, verbose = FALSE, overwrite = TRUE)
+  edit_apsimx(diag_file, local_tmp, local_tmp, node = "Soil",
+    soil.child = "Physical", parm = "KL", value = KL, verbose = FALSE, overwrite = TRUE)
+  edit_apsimx(diag_file, local_tmp, local_tmp, node = "Soil",
+    soil.child = "Physical", parm = "XF", value = XF, verbose = FALSE, overwrite = TRUE)
+  edit_apsimx(diag_file, local_tmp, local_tmp, node = "Weather",
+    value = normalizePath(file.path(weather_path, paste0(j, ".met")), mustWork = FALSE),
+    overwrite = TRUE, verbose = FALSE)
+
+  cat(sprintf("[DIAG] APSIM file ready: %s\n", diag_abs))
+  cat(sprintf("[DIAG] Files in tmp before run:\n"))
+  print(list.files(local_tmp, pattern = paste0("diag-cell-", j)))
+
+  ## Run APSIM — silent = FALSE shows APSIM's own error messages
+  cat("[DIAG] Running APSIM (silent = FALSE so you see any errors)...\n")
+  sim_diag <- tryCatch(
+    apsimx(file = diag_file, src.dir = local_tmp,
+           cleanup = FALSE,   # keep .db so we can inspect it
+           silent  = FALSE),
+    error = function(e) { cat("[DIAG] ERROR:", e$message, "\n"); NULL }
+  )
+
+  cat(sprintf("\n[DIAG] Files in tmp after run:\n"))
+  print(list.files(local_tmp, pattern = paste0("diag-cell-", j)))
+
+  if (!is.null(sim_diag)) {
+    cat(sprintf("[DIAG] SUCCESS — %d rows, columns:\n", nrow(sim_diag)))
+    cat(paste(names(sim_diag), collapse = ", "), "\n")
+    cat(sprintf("[DIAG] First row Yield_kgha: %s\n",
+                if ("Yield_kgha" %in% names(sim_diag)) sim_diag$Yield_kgha[1] else "NOT FOUND"))
+  } else {
+    cat("[DIAG] APSIM returned NULL — check messages above.\n")
+    cat("[DIAG] The .apsimx file is kept at:", diag_abs, "\n")
+    cat("[DIAG] Try opening it manually in APSIM to see the error.\n")
+  }
+
+  stop("[DIAG] Diagnostic complete — set RUN_DIAGNOSTIC <- FALSE to run normally.")
+}
+
 ## ── Cluster — started ONCE, all scenarios share it ───────────
 n_workers <- min(ENV$cores_use, nrow(sim.grid1))
 cat(sprintf("\n[CLUSTER] Starting %d workers (PSOCK)\n", n_workers))

@@ -76,11 +76,15 @@ detect_env <- function() {
   if (os == "windows") {
     local_app  <- Sys.getenv("LOCALAPPDATA",
                               file.path(Sys.getenv("USERPROFILE"), "AppData", "Local"))
+    apsim_search <- c(file.path(local_app, "Programs"),
+                      "C:/Program Files", "C:/Program Files (x86)")
     apsim_dirs <- sort(grep("APSIM",
-                             list.dirs(file.path(local_app, "Programs"), recursive = FALSE),
+                             unlist(lapply(apsim_search, function(d) {
+                               if (dir.exists(d)) list.dirs(d, recursive = FALSE) else character(0)
+                             })),
                              value = TRUE, ignore.case = TRUE))
     if (length(apsim_dirs) == 0)
-      stop("[ERROR] APSIM not found under ", file.path(local_app, "Programs"))
+      stop("[ERROR] APSIM not found under any of: ", paste(apsim_search, collapse = ", "))
     apsim_exe <- file.path(tail(apsim_dirs, 1), "bin", "Models.exe")
 
     ## Box auto-detection — machine-agnostic

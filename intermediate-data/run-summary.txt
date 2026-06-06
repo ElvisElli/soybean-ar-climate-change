@@ -1,35 +1,19 @@
 ================================================================
-SIMULATION SUMMARY — 2026-06-06 12:29
+SIMULATION SUMMARY — 2026-06-06 12:37
 ================================================================
 Machine    : vm (unix)
 Workers    : 3 | Chunk size: 5
-Total time : 4.5 minutes
+Total time : 0.6 minutes
 
 ── Yield by scenario ────────────────────────────────────────
-# A tibble: 9 x 8
-  scenario         co2 cultivar sowing cells years yield_mean_kgha yield_sd_kgha
-  <chr>          <dbl> <chr>    <chr>  <int> <int>           <dbl>         <dbl>
-1 baseline         350 Purcell~ 15-May    10     6            3767           160
-2 climate_change   350 Purcell~ 15-May    10     6            3404           138
-3 climate_change   540 Purcell~ 15-May    10     6            4172           144
-4 early_sowing     350 Purcell~ 15-Apr    10     6            3589           118
-5 early_sowing     540 Purcell~ 15-Apr    10     6            4359           101
-6 early_sowing_~   350 Purcell~ 15-Apr    10     6            3937           188
-7 early_sowing_~   540 Purcell~ 15-Apr    10     6            4808           191
-8 longer_mat       350 Purcell~ 15-May    10     6            3585           196
-9 longer_mat       540 Purcell~ 15-May    10     6            4438           230
+# A tibble: 1 x 8
+  scenario   co2 cultivar   sowing cells years yield_mean_kgha yield_sd_kgha
+  <chr>    <dbl> <chr>      <chr>  <int> <int>           <dbl>         <dbl>
+1 baseline   350 PurcellMG4 15-May    10     6            3767           160
 
 ── Coverage check ───────────────────────────────────────────
-# A tibble: 9 x 5
-  scenario                  co2 cells missing pct_ok
-  <chr>                   <dbl> <int>   <int>  <dbl>
-1 baseline                  350    10       0    100
-2 climate_change            350    10       0    100
-3 climate_change            540    10       0    100
-4 early_sowing              350    10       0    100
-5 early_sowing              540    10       0    100
-6 early_sowing_longer_mat   350    10       0    100
-7 early_sowing_longer_mat   540    10       0    100
-8 longer_mat                350    10       0    100
-9 longer_mat                540    10       0    100
+# A tibble: 1 x 5
+  scenario   co2 cells missing pct_ok
+  <chr>    <dbl> <int>   <int>  <dbl>
+1 baseline   350    10       0    100
 ================================================================

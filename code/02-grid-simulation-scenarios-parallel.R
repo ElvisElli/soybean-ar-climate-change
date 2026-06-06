@@ -194,7 +194,7 @@ if (!file.exists(base_apsimx))
 ## no admin privileges needed (unlike C:/temp which may be restricted).
 ## On Linux, use intermediate-data/apsim-work/.
 apsim_dir <- if (ENV$is_windows) {
-  file.path(tempdir(), "apsim-soy")
+  normalizePath(file.path(tempdir(), "apsim-soy"), mustWork = FALSE)
 } else {
   normalizePath("intermediate-data/apsim-work", mustWork = FALSE)
 }

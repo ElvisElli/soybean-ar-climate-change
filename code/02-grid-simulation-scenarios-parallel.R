@@ -85,7 +85,7 @@ detect_env <- function() {
                              value = TRUE, ignore.case = TRUE))
     if (length(apsim_dirs) == 0)
       stop("[ERROR] APSIM not found under any of: ", paste(apsim_search, collapse = ", "))
-    apsim_exe <- file.path(tail(apsim_dirs, 1), "bin", "Models.exe")
+    apsim_exe <- utils::shortPathName(file.path(tail(apsim_dirs, 1), "bin", "Models.exe"))
 
     ## Box auto-detection — machine-agnostic
     user_home  <- Sys.getenv("USERPROFILE", path.expand("~"))

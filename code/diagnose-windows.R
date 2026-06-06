@@ -36,7 +36,7 @@ apsim_dirs <- sort(grep("APSIM",
     if (dir.exists(d)) list.dirs(d, recursive = FALSE) else character(0)
   })),
   value = TRUE, ignore.case = TRUE))
-apsim_exe  <- file.path(tail(apsim_dirs, 1), "bin", "Models.exe")
+apsim_exe  <- utils::shortPathName(file.path(tail(apsim_dirs, 1), "bin", "Models.exe"))
 
 cat("\n=== STEP 2: APSIM exe ===\n")
 cat("Exe path :", apsim_exe, "| exists:", file.exists(apsim_exe), "\n")

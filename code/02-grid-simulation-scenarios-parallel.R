@@ -318,35 +318,37 @@ if (RUN_DIAGNOSTIC) {
   KL <- KL_VEC[seq_len(min(n_lay, length(KL_VEC)))]
   XF <- XF_VEC[seq_len(min(n_lay, length(XF_VEC)))]
 
-  ## Build APSIM file
-  diag_file <- paste0("diag-cell-", j, ".apsimx")
-  diag_abs  <- file.path(local_tmp, diag_file)
+  ## Build APSIM file in isolated directory (same pattern as production)
+  diag_dir  <- file.path(local_tmp, paste0("diag-cell-", j))
+  dir.create(diag_dir, showWarnings = FALSE, recursive = TRUE)
+  diag_file <- "sim.apsimx"
+  diag_abs  <- file.path(diag_dir, diag_file)
   file.copy(file.path(local_tmp, "grid-simulation-file.apsimx"), diag_abs, overwrite = TRUE)
-  edit_apsimx_replace_soil_profile(diag_file, local_tmp, local_tmp,
+  edit_apsimx_replace_soil_profile(diag_file, diag_dir, diag_dir,
     soil.profile = soils, verbose = FALSE, overwrite = TRUE)
-  edit_apsimx(diag_file, local_tmp, local_tmp, node = "Soil",
+  edit_apsimx(diag_file, diag_dir, diag_dir, node = "Soil",
     soil.child = "Physical", parm = "KL", value = KL, verbose = FALSE, overwrite = TRUE)
-  edit_apsimx(diag_file, local_tmp, local_tmp, node = "Soil",
+  edit_apsimx(diag_file, diag_dir, diag_dir, node = "Soil",
     soil.child = "Physical", parm = "XF", value = XF, verbose = FALSE, overwrite = TRUE)
-  edit_apsimx(diag_file, local_tmp, local_tmp, node = "Weather",
+  edit_apsimx(diag_file, diag_dir, diag_dir, node = "Weather",
     value = normalizePath(file.path(weather_path, paste0(j, ".met")), mustWork = FALSE),
     overwrite = TRUE, verbose = FALSE)
 
   cat(sprintf("[DIAG] APSIM file ready: %s\n", diag_abs))
-  cat(sprintf("[DIAG] Files in tmp before run:\n"))
-  print(list.files(local_tmp, pattern = paste0("diag-cell-", j)))
+  cat(sprintf("[DIAG] Files in isolated dir before run:\n"))
+  print(list.files(diag_dir))
 
   ## Run APSIM — silent = FALSE shows APSIM's own error messages
   cat("[DIAG] Running APSIM (silent = FALSE so you see any errors)...\n")
   sim_diag <- tryCatch(
-    apsimx(file = diag_file, src.dir = local_tmp,
+    apsimx(file = diag_file, src.dir = diag_dir,
            cleanup = FALSE,   # keep .db so we can inspect it
            silent  = FALSE),
     error = function(e) { cat("[DIAG] ERROR:", e$message, "\n"); NULL }
   )
 
-  cat(sprintf("\n[DIAG] Files in tmp after run:\n"))
-  print(list.files(local_tmp, pattern = paste0("diag-cell-", j)))
+  cat(sprintf("\n[DIAG] Files in isolated dir after run:\n"))
+  print(list.files(diag_dir))
 
   if (!is.null(sim_diag)) {
     cat(sprintf("[DIAG] SUCCESS — %d rows, columns:\n", nrow(sim_diag)))
@@ -514,23 +516,28 @@ tryCatch({
         KL    <- KL_VEC[seq_len(min(n_lay, length(KL_VEC)))]
         XF    <- XF_VEC[seq_len(min(n_lay, length(XF_VEC)))]
 
-        ## ── Build per-cell APSIM file (avoids race conditions) ──
-        par_file <- paste0("par-sim-", j, ".apsimx")
-        par_abs  <- file.path(local_tmp, par_file)
+        ## ── Build per-cell APSIM file in its own isolated subdirectory ──
+        ## Each cell gets its own folder so cleanup=TRUE in apsimx() can
+        ## never touch another worker's .db file (that was the root cause
+        ## of "no .db files" — one worker's cleanup deleted another's db).
+        cell_dir <- file.path(local_tmp, paste0("cell-", j))
+        dir.create(cell_dir, showWarnings = FALSE)
+        par_file <- "sim.apsimx"
+        par_abs  <- file.path(cell_dir, par_file)
 
         built <- tryCatch({
           file.copy(file.path(local_tmp, "grid-simulation-file.apsimx"),
                     par_abs, overwrite = TRUE)
           edit_apsimx_replace_soil_profile(
-            file = par_file, src.dir = local_tmp, wrt.dir = local_tmp,
+            file = par_file, src.dir = cell_dir, wrt.dir = cell_dir,
             soil.profile = soils, verbose = FALSE, overwrite = TRUE)
-          edit_apsimx(par_file, local_tmp, local_tmp,
+          edit_apsimx(par_file, cell_dir, cell_dir,
             node = "Soil", soil.child = "Physical",
             parm = "KL", value = KL, verbose = FALSE, overwrite = TRUE)
-          edit_apsimx(par_file, local_tmp, local_tmp,
+          edit_apsimx(par_file, cell_dir, cell_dir,
             node = "Soil", soil.child = "Physical",
             parm = "XF", value = XF, verbose = FALSE, overwrite = TRUE)
-          edit_apsimx(par_file, local_tmp, local_tmp,
+          edit_apsimx(par_file, cell_dir, cell_dir,
             node = "Weather",
             value = normalizePath(file.path(weather_path, paste0(j, ".met")),
                                   mustWork = FALSE),
@@ -541,16 +548,16 @@ tryCatch({
           FALSE
         })
 
-        if (!built) { unlink(par_abs); n_fail <- n_fail + 1L; next }
+        if (!built) { unlink(cell_dir, recursive = TRUE); n_fail <- n_fail + 1L; next }
 
-        ## ── Run APSIM ───────────────────────────────────────────
+        ## ── Run APSIM (isolated dir: cleanup=TRUE is safe here) ─────
         sim <- tryCatch(
-          apsimx(file = par_file, src.dir = local_tmp, cleanup = TRUE),
+          apsimx(file = par_file, src.dir = cell_dir, cleanup = TRUE),
           error = function(e) {
             err_msgs <<- c(err_msgs, paste0("cell ", j, ": APSIM error — ", e$message))
             NULL
           })
-        unlink(par_abs)
+        unlink(cell_dir, recursive = TRUE)  # remove cell-{j}/ entirely
 
         if (!is.null(sim) && nrow(sim) > 0) {
           ## Log actual column names from APSIM on first cell of run

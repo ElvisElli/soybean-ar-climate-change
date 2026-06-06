@@ -199,18 +199,23 @@ message(sprintf("[INFO] Chunk size             : %d", CHUNK_SIZE))
 message(sprintf("[INFO] Estimated chunks/sc    : %d",
                 ceiling(nrow(sim.grid1) / CHUNK_SIZE)))
 
-## ── Locate base template — apsim_dir is where all sim files live ─────────────
-## Using the template's own folder keeps everything in one place (no temp dir).
-## Per-cell subdirectories (cell-{id}/) are created here during the run.
+## ── Locate base template ─────────────────────────────────────
+## The template lives in "processed data/" (has a space) but apsimx does not
+## allow spaces in working paths.  We copy the template to a no-space working
+## directory (intermediate-data/apsim-work/) at startup and run everything
+## from there.  The original file is never modified.
 base_apsimx <- normalizePath("processed data/_soybean-10-24-25.apsimx", mustWork = FALSE)
 if (!file.exists(base_apsimx))
   base_apsimx <- normalizePath("processed-data/_soybean-10-24-25.apsimx", mustWork = FALSE)
 if (!file.exists(base_apsimx))
   stop("[ERROR] Base APSIM template not found: ", base_apsimx)
 
-apsim_dir     <- dirname(base_apsimx)          # e.g. "processed data/"
+apsim_dir <- normalizePath("intermediate-data/apsim-work", mustWork = FALSE)
+dir.create(apsim_dir, recursive = TRUE, showWarnings = FALSE)
+
 template_file <- file.path(apsim_dir, "grid-simulation-file.apsimx")
 file.copy(base_apsimx, template_file, overwrite = TRUE)
+message("[PATHS] APSIM work : ", apsim_dir)
 
 for (parm_val in list(list("Start", DATE_START), list("End", DATE_END))) {
   edit_apsimx(file = "grid-simulation-file.apsimx",

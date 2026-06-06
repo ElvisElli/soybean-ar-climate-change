@@ -17,3 +17,5 @@
 "longer_mat",8,540,2,5,5,0,32.3,"","2026-06-06 12:28:55"
 "early_sowing_longer_mat",9,540,1,5,5,0,32.7,"","2026-06-06 12:29:29"
 "early_sowing_longer_mat",9,540,2,5,5,0,32.7,"","2026-06-06 12:29:29"
+"baseline",1,350,1,5,0,5,3.8,"cell 12662: There are no .db files in the specified directory to read.; cell 19644: There are no .db files in the specified directory to read.; cell 11615: There are no .db files in the specified directory to read.; cell 6744: soil load failed; cell 7284: There are no .db files in the specified directory to read.","2026-06-06 07:31:17"
+"baseline",1,350,2,5,0,5,4.7,"cell 4823: There are no .db files in the specified directory to read.; cell 10526: There are no .db files in the specified directory to read.; cell 18551: There are no .db files in the specified directory to read.; cell 3354: There are no .db files in the specified directory to read.; cell 21595: There are no .db files in the specified directory to read.","2026-06-06 07:31:17"

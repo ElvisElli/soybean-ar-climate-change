@@ -560,14 +560,43 @@ tryCatch({
 
         if (!built) { unlink(cell_dir, recursive = TRUE); n_fail <- n_fail + 1L; next }
 
-        ## ── Run APSIM (isolated dir: cleanup=TRUE is safe here) ─────
+        ## ── Run APSIM ────────────────────────────────────────────
+        ## cleanup=FALSE so we control cleanup; we search for the .db
+        ## ourselves because on Windows the .db may be written to a
+        ## slightly different path than apsimx expects.
+        apsimx_error <- NULL
         sim <- tryCatch(
-          apsimx(file = par_file, src.dir = cell_dir, cleanup = TRUE),
-          error = function(e) {
-            err_msgs <<- c(err_msgs, paste0("cell ", j, ": APSIM error — ", e$message))
-            NULL
-          })
-        unlink(cell_dir, recursive = TRUE)  # remove cell-{j}/ entirely
+          apsimx(file = par_file, src.dir = cell_dir, cleanup = FALSE, silent = TRUE),
+          error = function(e) { apsimx_error <<- e$message; NULL }
+        )
+
+        ## If apsimx() failed or returned nothing, search wider for the .db
+        if (is.null(sim) || nrow(sim) == 0) {
+          db_files <- list.files(cell_dir, pattern = "\\.db$",
+                                 full.names = TRUE, recursive = FALSE)
+          ## Also check one level up (R working dir) in case APSIM wrote it there
+          db_up <- list.files(getwd(), pattern = "^sim\\.db$", full.names = TRUE)
+          all_db <- c(db_files, db_up)
+          if (length(all_db) > 0 && is.null(sim)) {
+            sim <- tryCatch(
+              read_apsimx(file = basename(all_db[1]),
+                          src.dir = dirname(all_db[1])),
+              error = function(e) NULL
+            )
+          }
+          if (is.null(sim) || nrow(sim) == 0) {
+            msg <- if (!is.null(apsimx_error)) apsimx_error else "no .db found"
+            db_info <- paste0("db_in_cell=[",
+                              paste(basename(db_files), collapse=","), "] ",
+                              "db_in_cwd=[", paste(basename(db_up), collapse=","), "]")
+            err_msgs <<- c(err_msgs,
+              paste0("cell ", j, ": APSIM error — ", msg, " | ", db_info))
+          }
+        }
+        ## Clean up cell directory and any stray .db in cwd
+        unlink(cell_dir, recursive = TRUE)
+        invisible(lapply(list.files(getwd(), pattern="^sim\\.db",
+                                    full.names=TRUE), file.remove))
 
         if (!is.null(sim) && nrow(sim) > 0) {
           ## Log actual column names from APSIM on first cell of run

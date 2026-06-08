@@ -47,10 +47,10 @@ DATE_END   <- "2024-12-31"
 ## ── Test mode ────────────────────────────────────────────────
 ## Set TEST_RUN <- TRUE for a quick validation before the full run.
 TEST_RUN         <- TRUE
-TEST_N_CELLS     <- 10
+TEST_N_CELLS     <- 1000          # capped to available data files in cloud
 TEST_DATE_START  <- "2015-01-01"
-TEST_DATE_END    <- "2020-12-31"
-TEST_N_SCENARIOS <- 1
+TEST_DATE_END    <- "2015-12-31"
+TEST_N_SCENARIOS <- 2
 
 ## ── Notifications ────────────────────────────────────────────
 ## One-time setup in RStudio console (Windows):
@@ -171,7 +171,16 @@ scenarios <- read_excel("intermediate-data/scenarios/soy-scenarios-10-24.xlsx",
 ## ── Apply test limits ────────────────────────────────────────
 if (TEST_RUN) {
   set.seed(42)
+  ## Restrict to cells that have both weather and soil files (critical on cloud
+  ## where only a subset of data files are available)
+  met_ids  <- as.integer(sub("\\.met$", "", list.files(weather_path, "\\.met$")))
+  soil_ids <- as.integer(sub("\\.rds$", "", list.files(soil_path,    "\\.rds$")))
+  avail    <- intersect(met_ids, soil_ids)
+  sim.grid1 <- sim.grid1[sim.grid1$cellid %in% avail, ]
+  if (nrow(sim.grid1) == 0)
+    stop("[TEST] No cells with both weather and soil files found.")
   sim.grid1  <- sim.grid1[sample(nrow(sim.grid1), min(TEST_N_CELLS, nrow(sim.grid1))), ]
+  cat(sprintf("[TEST] %d cells available with data; using %d\n", length(avail), nrow(sim.grid1)))
   scenarios  <- scenarios[seq_len(min(TEST_N_SCENARIOS, nrow(scenarios))), ]
   DATE_START <- TEST_DATE_START
   DATE_END   <- TEST_DATE_END

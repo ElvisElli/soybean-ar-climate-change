@@ -652,7 +652,6 @@ final.df     <- dplyr::bind_rows(Filter(Negate(is.null), final.df))
 total_elapsed <- round(as.numeric(difftime(Sys.time(), run_started, units = "mins")), 1)
 
 saveRDS(final.df, "data/outputs/simulated-scenarios-df.rds")
-write_csv(final.df, "data/outputs/simulated-scenarios-df.csv")
 
 cat(sprintf("\n[DONE] %d rows | %d scenarios | %d cells | %.1f min\n",
             nrow(final.df),

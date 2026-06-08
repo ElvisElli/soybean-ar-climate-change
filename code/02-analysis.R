@@ -25,14 +25,17 @@ source("code/utils/plot-theme.R")
 simulated0 <- readRDS("data/outputs/simulated-scenarios-df.rds") %>%
   as_tibble()
 
-treatment_cols <- c("cultivar", "sowing", "scenario", "climate.control", "co2", "rowSpacing")
+treatment_cols <- intersect(
+  c("cultivar", "sowing", "scenario", "climate.control", "co2", "rowSpacing"),
+  names(simulated0)
+)
 
 simulated0 %>%
   group_by(across(all_of(treatment_cols))) %>%
   summarise(
     n_rows  = n(),
     n_cells = n_distinct(cellid),
-    n_years = n_distinct(lubridate::year(Date)),
+    n_years = n_distinct(lubridate::year(.data[["Date"]])),
     .groups = "drop"
   ) %>%
   arrange(desc(n_rows))

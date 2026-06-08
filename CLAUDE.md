@@ -27,6 +27,14 @@ The script is **fully resumable** — re-run any time; completed chunks are skip
 | `DATE_START/END` | 1985–2024 | simulation clock |
 | Cores | `nCores - 2` | leaves 2 free for OS |
 
+## How to use this environment productively
+
+1. Start with `source("code/00-master.R")` so each phase runs in order and auto-skips completed outputs.
+2. Use the resumable workflow in `code/01-simulation.R` — if a run stops, restart instead of rerunning from scratch.
+3. Keep large weather/soil data outside git (as already configured) and only version results needed for analysis/reporting.
+4. Use `code/diagnostics/diagnose-windows.R` first on a new machine to quickly catch path/APSIM setup issues.
+5. Keep iteration fast: run simulation first, then analysis/report scripts after new outputs are generated.
+
 ## Environment auto-detection
 
 The script identifies the machine at startup — no manual configuration needed:

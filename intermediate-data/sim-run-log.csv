@@ -1,3 +1,5 @@
 "scenario","sc_idx","co2","chunk","cells_total","cells_ok","cells_fail","elapsed_sec","errors","timestamp"
-"baseline",1,350,1,5,0,5,4.8,"cell 12662: There are no .db files in the specified directory to read.; cell 19644: There are no .db files in the specified directory to read.; cell 11615: There are no .db files in the specified directory to read.; cell 6744: soil load failed; cell 7284: There are no .db files in the specified directory to read.","2026-06-06 08:05:55"
-"baseline",1,350,2,5,0,5,5.7,"cell 4823: There are no .db files in the specified directory to read.; cell 10526: There are no .db files in the specified directory to read.; cell 18551: There are no .db files in the specified directory to read.; cell 3354: There are no .db files in the specified directory to read.; cell 21595: There are no .db files in the specified directory to read.","2026-06-06 08:05:55"
+"baseline",1,350,1,6,6,0,31.6,"","2026-06-08 00:45:43"
+"baseline",1,350,2,5,5,0,26.2,"","2026-06-08 00:45:43"
+"climate_change",2,350,1,6,6,0,30.4,"","2026-06-08 00:46:15"
+"climate_change",2,350,2,5,5,0,25.3,"","2026-06-08 00:46:15"

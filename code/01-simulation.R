@@ -90,7 +90,7 @@ detect_env <- function() {
     ## Box auto-detection — machine-agnostic
     user_home  <- Sys.getenv("USERPROFILE", path.expand("~"))
     box_suffix <- file.path("_Projects", "Scale-Sims",
-                            "soybean-ar-climate-change", "data")
+                            "soybean-ar-climate-change", "intermediate-data")
     box_mounts <- c("Box", "Box Sync", "Box Drive")
     candidates <- unlist(lapply(box_mounts, function(m) file.path(user_home, m, box_suffix)))
     users_dir  <- dirname(user_home)
@@ -136,14 +136,15 @@ if (!is.null(ENV$apsim_exe)) {
 }
 
 ## ── Data paths ───────────────────────────────────────────────
-intermediate_data <- if (!is.null(ENV$box_root)) {
-  ENV$box_root
+## On Windows, Box root = .../intermediate-data/ and weather/soil sit directly inside.
+## On Linux,   repo data/raw/weather and data/raw/soil are used.
+if (!is.null(ENV$box_root)) {
+  weather_path <- normalizePath(file.path(ENV$box_root, "weather"), mustWork = FALSE)
+  soil_path    <- normalizePath(file.path(ENV$box_root, "soil"),    mustWork = FALSE)
 } else {
-  normalizePath("data", mustWork = FALSE)
+  weather_path <- normalizePath("data/raw/weather", mustWork = FALSE)
+  soil_path    <- normalizePath("data/raw/soil",    mustWork = FALSE)
 }
-
-weather_path   <- normalizePath(file.path(intermediate_data, "raw", "weather"), mustWork = FALSE)
-soil_path      <- normalizePath(file.path(intermediate_data, "raw", "soil"),    mustWork = FALSE)
 checkpoint_dir <- normalizePath("data/outputs/checkpoints",          mustWork = FALSE)
 log_file       <- normalizePath("data/outputs/sim-run-log.csv",     mustWork = FALSE)
 

@@ -1,4 +1,17 @@
-intermediate-data/apsim-work/
-intermediate-data/sim-chunks/
+# Large data files — stored in Box Drive, not in git
+data/raw/weather/
+data/raw/soil/
 intermediate-data/weather/
 intermediate-data/soil/
+
+# Runtime working directories
+data/outputs/checkpoints/
+data/outputs/apsim-work/
+intermediate-data/sim-chunks/
+intermediate-data/apsim-work/
+
+# Leftover intermediate-data directory (data migrated to data/)
+intermediate-data/
+
+# R session files
+.Rhistory

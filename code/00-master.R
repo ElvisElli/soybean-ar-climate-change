@@ -6,10 +6,10 @@
 ## Usage (command line): Rscript code/00-master.R
 ##
 ## Phases:
-##   1  Grid simulation     02-grid-simulation-scenarios-parallel.R
-##   2  Data analysis       03-data-analysis-6-5-26.R
-##   3  Inspection report   04-inspection-report.R
-##   4  Simulation report   05-simulation-report.R
+##   1  Grid simulation     01-simulation.R
+##   2  Data analysis       02-analysis.R
+##   3  Inspection report   03-report-scientific.R
+##   4  Simulation report   04-report-simulation.R
 ##
 ## Each phase is skipped automatically if its outputs already exist,
 ## unless FORCE_RERUN = TRUE.
@@ -69,8 +69,8 @@ if (RUN_SIM) {
   run_phase(
     phase        = "1",
     title        = "APSIM grid simulation",
-    output_check = "intermediate-data/simulated-scenarios-df.rds",
-    script       = "code/02-grid-simulation-scenarios-parallel.R"
+    output_check = "data/outputs/simulated-scenarios-df.rds",
+    script       = "code/01-simulation.R"
   )
 }
 
@@ -79,9 +79,9 @@ if (RUN_ANALYSIS) {
   run_phase(
     phase        = "2",
     title        = "Data analysis & manuscript figures",
-    output_check = c("plots/p1 - climate change without adaptation.tiff",
-                     "plots/p5 - environmental characterization.tiff"),
-    script       = "code/03-data-analysis-6-5-26.R"
+    output_check = c("figures/p1 - climate change without adaptation.tiff",
+                     "figures/p5 - environmental characterization.tiff"),
+    script       = "code/02-analysis.R"
   )
 }
 
@@ -90,8 +90,8 @@ if (RUN_REPORT) {
   run_phase(
     phase        = "3",
     title        = "PDF inspection report",
-    output_check = "plots/inspection-report.pdf",
-    script       = "code/04-inspection-report.R"
+    output_check = "figures/inspection-report.pdf",
+    script       = "code/03-report-scientific.R"
   )
 }
 
@@ -100,16 +100,16 @@ if (RUN_SIM_REPORT) {
   run_phase(
     phase        = "4",
     title        = "Simulation run report (technical)",
-    output_check = "plots/simulation-report.pdf",
-    script       = "code/05-simulation-report.R"
+    output_check = "figures/simulation-report.pdf",
+    script       = "code/04-report-simulation.R"
   )
 }
 
 ## ── Summary ───────────────────────────────────────────────────────────────
 cat(paste(rep("═", 72), collapse = ""), "\n")
 cat(sprintf("[%s] All phases complete.\n", .ts()))
-cat(sprintf("  Manuscript figures   : plots/\n"))
-cat(sprintf("  Inspection report    : plots/inspection-report.pdf\n"))
-cat(sprintf("  Simulation report    : plots/simulation-report.pdf\n"))
-cat(sprintf("  Simulation results   : intermediate-data/simulated-scenarios-df.rds\n"))
+cat(sprintf("  Manuscript figures   : figures/\n"))
+cat(sprintf("  Inspection report    : figures/inspection-report.pdf\n"))
+cat(sprintf("  Simulation report    : figures/simulation-report.pdf\n"))
+cat(sprintf("  Simulation results   : data/outputs/simulated-scenarios-df.rds\n"))
 cat(paste(rep("═", 72), collapse = ""), "\n\n")

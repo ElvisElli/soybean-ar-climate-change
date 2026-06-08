@@ -13,10 +13,10 @@ and earlier planting (May 15 → May 3) under a +2 °C warming scenario.
 
 ```r
 # From repo root in RStudio:
-source("code/02-grid-simulation-scenarios-parallel.R")
+source("code/00-master.R")
 
 # Or from command line (Windows):
-Rscript code\02-grid-simulation-scenarios-parallel.R
+Rscript code\01-simulation.R
 ```
 
 The script is **fully resumable** — re-run any time; completed chunks are skipped automatically.
@@ -42,27 +42,27 @@ To add a new Windows machine: nothing needed — the Box scan and APSIM auto-det
 
 | Script | Purpose |
 |---|---|
-| `code/02-grid-simulation-scenarios-parallel.R` | Run APSIM across grid × scenarios (parallel) |
-| `code/03-data-analysis-6-5-26.R` | Generate all manuscript figures |
+| `code/01-simulation.R` | Run APSIM across grid × scenarios (parallel) |
+| `code/02-analysis.R` | Generate all manuscript figures |
 | `code/variables.R` | Soil-fraction weighted variable aggregation |
-| `code/plot_theme.R` | Shared ggplot2 theme |
+| `code/utils/plot-theme.R` | Shared ggplot2 theme |
 
 ## Key intermediate data files
 
 | File | Description |
 |---|---|
-| `intermediate-data/sim-grid.rds` | Spatial grid (x, y, cellid, cultivated flag) |
-| `intermediate-data/simulated-scenarios-df.rds` | Full simulation results (~30 MB) |
-| `intermediate-data/scenarios/soy-scenarios-10-24.xlsx` | Scenario definitions |
-| `intermediate-data/sim-chunks/` | Per-chunk checkpoint RDS files (gitignored) |
-| `intermediate-data/sim-run-log.csv` | Per-chunk progress log (timing, errors) |
-| `intermediate-data/run-summary.txt` | End-of-run inspection report |
-| `intermediate-data/weather/` | `.met` files (in Box, gitignored) |
-| `intermediate-data/soil/` | `.rds` soil profiles (in Box, gitignored) |
+| `data/raw/sim-grid.rds` | Spatial grid (x, y, cellid, cultivated flag) |
+| `data/outputs/simulated-scenarios-df.rds` | Full simulation results (~30 MB) |
+| `data/raw/scenarios/soy-scenarios-10-24.xlsx` | Scenario definitions |
+| `data/outputs/checkpoints/` | Per-chunk checkpoint RDS files (gitignored) |
+| `data/outputs/sim-run-log.csv` | Per-chunk progress log (timing, errors) |
+| `data/outputs/run-summary.txt` | End-of-run inspection report |
+| `data/raw/weather/` | `.met` files (in Box, gitignored) |
+| `data/raw/soil/` | `.rds` soil profiles (in Box, gitignored) |
 
 ## Scenarios
 
-Defined in `intermediate-data/scenarios/soy-scenarios-10-24.xlsx`:
+Defined in `data/raw/scenarios/soy-scenarios-10-24.xlsx`:
 
 | Scenario | Cultivar | Sowing | CO₂ (ppm) | Climate |
 |---|---|---|---|---|
@@ -95,10 +95,10 @@ Water balance: `Crop_ET`, `WDrainage`, `WRunoff`, `sWUE`
 
 ## Crash recovery
 
-- **Per-chunk RDS checkpoints** in `intermediate-data/sim-chunks/` survive crashes.
+- **Per-chunk RDS checkpoints** in `data/outputs/checkpoints/` survive crashes.
 - **Filename pattern** `chunk_sc<sc>_ck<chunk>_<first_cellid>.rds` encodes scenario + chunk index.
 - Re-running the script resumes from the last completed chunk automatically.
-- Progress log at `intermediate-data/sim-run-log.csv` tracks cells attempted/ok/failed per chunk.
+- Progress log at `data/outputs/sim-run-log.csv` tracks cells attempted/ok/failed per chunk.
 
 ## Paper
 

@@ -25,27 +25,38 @@ APSIM simulation project.
 ```
 repo-root/
 ├── code/
-│   ├── 00-master.R                          # runs all phases in sequence
-│   ├── 02-grid-simulation-scenarios-parallel.R  # Phase 1: APSIM simulation
-│   ├── 03-data-analysis-6-5-26.R           # Phase 2: manuscript figures
-│   ├── 04-inspection-report.R              # Phase 3: scientific PDF report
-│   ├── 05-simulation-report.R              # Phase 4: technical run report
-│   ├── plot_theme.R                        # shared ggplot2 theme
-│   └── variables.R                         # soil-fraction variable aggregation
-├── processed-data/                          # APSIM template (.apsimx)
-├── intermediate-data/
-│   ├── weather/                            # .met files (gitignored)
-│   ├── soil/                               # .rds soil profiles (gitignored)
-│   ├── sim-chunks/                         # per-chunk checkpoints (gitignored)
-│   ├── apsim-work/                         # temp cell dirs during run (gitignored)
-│   ├── simulated-scenarios-df.rds          # full results
-│   ├── sim-run-log.csv                     # per-chunk timing log
-│   └── run-summary.txt                     # end-of-run summary
-├── raw-data/                               # shapefiles for maps
-├── plots/                                  # all output figures and PDFs
-├── paper/                                  # manuscript files
-├── CLAUDE.md                               # AI assistant instructions
-└── PIPELINE-MEMO.md                        # this file
+│   ├── 00-master.R                  # runs all phases in sequence
+│   ├── 01-simulation.R              # Phase 1: APSIM grid simulation
+│   ├── 02-analysis.R                # Phase 2: manuscript figures
+│   ├── 03-report-scientific.R       # Phase 3: scientific PDF report
+│   ├── 04-report-simulation.R       # Phase 4: technical run report
+│   ├── utils/
+│   │   ├── plot-theme.R             # shared ggplot2 theme
+│   │   └── variables.R              # soil-fraction variable aggregation
+│   └── diagnostics/
+│       └── diagnose-windows.R       # step-by-step Windows diagnostic
+├── data/
+│   ├── raw/
+│   │   ├── sim-grid.rds             # spatial grid
+│   │   ├── scenarios/               # scenario Excel files
+│   │   ├── weather/                 # .met files (gitignored, in Box)
+│   │   └── soil/                    # .rds soil profiles (gitignored, in Box)
+│   └── outputs/
+│       ├── simulated-scenarios-df.rds  # full simulation results
+│       ├── simulated-scenarios-df.csv
+│       ├── sim-run-log.csv          # per-chunk timing log
+│       ├── run-summary.txt          # end-of-run summary
+│       └── checkpoints/             # per-chunk RDS files (gitignored)
+├── templates/
+│   └── soybean-mg4-baseline.apsimx  # APSIM simulation template
+├── installers/
+│   ├── apsim-7681.deb               # APSIM installer (Linux)
+│   └── apsim-7681.exe               # APSIM installer (Windows)
+├── figures/                         # all output figures and PDFs
+├── raw-data/                        # shapefiles for spatial maps
+├── paper/                           # manuscript files
+├── CLAUDE.md                        # AI assistant instructions
+└── PIPELINE-MEMO.md                 # this file
 ```
 
 ---
@@ -73,7 +84,7 @@ if (os == "windows") {
     file.path(tail(apsim_dirs, 1), "bin", "Models.exe"))
 
   # Box Drive data — scan all user profiles automatically
-  box_suffix <- file.path("_Projects", "Scale-Sims", "<project>", "intermediate-data")
+  box_suffix <- file.path("_Projects", "Scale-Sims", "<project>", "data")
   ...
 } else {
   apsim_exe <- Sys.which("Models")     # APSIM installed system-wide on Linux
@@ -95,7 +106,7 @@ if (os == "windows") {
 refuses to open a `.apsimx` file saved by a newer version.
 
 **Solution:** Match the APSIM installation version to the version that created
-the template. Keep the installer `.exe` / `.deb` in `processed-data/` so any
+the template. Keep the installer `.exe` / `.deb` in `installers/` so any
 machine can install the correct version.
 
 **Key lesson:** The APSIM build number is embedded in the `.apsimx` JSON. If you
@@ -111,7 +122,7 @@ The `apsimx` R package rejects any path containing a space.
 | Problem path | Fix |
 |---|---|
 | `C:\Program Files\APSIM...\Models.exe` | `utils::shortPathName()` → `C:\PROGRA~1\...` |
-| `processed data/` (folder name) | Rename to `processed-data/` via `git mv` |
+| `processed data/` (folder name) | Rename to `templates/` or `data/outputs/apsim-work/` via `git mv` |
 | `file.path(tempdir(), "x")` on Windows | `normalizePath(file.path(...), mustWork=FALSE)` |
 
 **Rule:** Any path passed to `apsimx()` or `apsimx_options()` must never
@@ -174,7 +185,7 @@ sim <- tryCatch(
 
 ### Chunk file naming
 ```
-intermediate-data/sim-chunks/chunk_sc<sc>_ck<chunk>_<first_cellid>.rds
+data/outputs/checkpoints/chunk_sc<sc>_ck<chunk>_<first_cellid>.rds
 ```
 The scenario index, chunk index, and first cell ID are embedded in the filename.
 On restart, completed chunks are detected by parsing existing filenames —
@@ -188,7 +199,7 @@ cells_todo  <- setdiff(all_cells, done_cellids)
 ```
 
 ### Per-chunk progress log
-`intermediate-data/sim-run-log.csv` — written after every chunk with columns:
+`data/outputs/sim-run-log.csv` — written after every chunk with columns:
 `scenario, sc_idx, co2, chunk, cells_total, cells_ok, cells_fail, elapsed_sec, errors, timestamp`
 
 ---
@@ -300,14 +311,14 @@ run_phase <- function(phase, title, output_check, script) {
   source(script, echo = FALSE, local = new.env(parent = globalenv()))
 }
 
-run_phase("1", "APSIM simulation",   "intermediate-data/simulated-scenarios-df.rds",
-          "code/02-grid-simulation-scenarios-parallel.R")
-run_phase("2", "Data analysis",      "plots/p1 - climate change without adaptation.tiff",
-          "code/03-data-analysis-6-5-26.R")
-run_phase("3", "Inspection report",  "plots/inspection-report.pdf",
-          "code/04-inspection-report.R")
-run_phase("4", "Simulation report",  "plots/simulation-report.pdf",
-          "code/05-simulation-report.R")
+run_phase("1", "APSIM simulation",   "data/outputs/simulated-scenarios-df.rds",
+          "code/01-simulation.R")
+run_phase("2", "Data analysis",      "figures/p1 - climate change without adaptation.tiff",
+          "code/02-analysis.R")
+run_phase("3", "Inspection report",  "figures/inspection-report.pdf",
+          "code/03-report-scientific.R")
+run_phase("4", "Simulation report",  "figures/simulation-report.pdf",
+          "code/04-report-simulation.R")
 ```
 
 **Key:** Each phase checks for its own output file before running. Set
@@ -319,9 +330,9 @@ run_phase("4", "Simulation report",  "plots/simulation-report.pdf",
 
 | Script | Output | Contents |
 |--------|--------|----------|
-| `03-data-analysis-6-5-26.R` | `plots/*.tiff` | All manuscript figures |
-| `04-inspection-report.R` | `plots/inspection-report.pdf` | All paper figures + 8 reviewer inspection plots |
-| `05-simulation-report.R` | `plots/simulation-report.pdf` | 10-page technical run report |
+| `03-data-analysis-6-5-26.R` | `figures/*.tiff` | All manuscript figures |
+| `04-inspection-report.R` | `figures/inspection-report.pdf` | All paper figures + 8 reviewer inspection plots |
+| `05-simulation-report.R` | `figures/simulation-report.pdf` | 10-page technical run report |
 
 ### Simulation report pages (05)
 1. Title page — cells, scenarios, years, success rate, total time
@@ -367,13 +378,13 @@ exactly what APSIM does step by step. It:
 
 ```
 intermediate-data/apsim-work/    # temp cell working dirs
-intermediate-data/sim-chunks/    # checkpoint RDS files
-intermediate-data/weather/       # .met files (large, in Box)
-intermediate-data/soil/          # .rds soil profiles (large, in Box)
+data/outputs/checkpoints/    # checkpoint RDS files
+data/raw/weather/       # .met files (large, in Box)
+data/raw/soil/          # .rds soil profiles (large, in Box)
 ```
 
 Track: `sim-run-log.csv`, `run-summary.txt`, `simulated-scenarios-df.rds`,
-`simulated-scenarios-df.csv`, `plots/`.
+`simulated-scenarios-df.csv`, `figures/`.
 
 ---
 
@@ -393,8 +404,8 @@ Track: `sim-run-log.csv`, `run-summary.txt`, `simulated-scenarios-df.rds`,
 
 - [ ] Create repo with same folder structure
 - [ ] Write `CLAUDE.md` describing the project for AI assistance
-- [ ] Place `.apsimx` template in `processed-data/` (no spaces in path)
-- [ ] Note the APSIM build number used to save the template; store installer in `processed-data/`
+- [ ] Place `.apsimx` template in `templates/ (APSIM template) and installers/ (exe/deb)` (no spaces in path)
+- [ ] Note the APSIM build number used to save the template; store installer in `templates/ (APSIM template) and installers/ (exe/deb)`
 - [ ] Copy and adapt `detect_env()` with project-specific Box path suffix
 - [ ] Copy `prepare_soil()` — adjust `KL_VEC`, `XF_VEC`, and crop list
 - [ ] Copy checkpoint/resume logic — only change the chunk filename prefix

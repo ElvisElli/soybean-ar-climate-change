@@ -28,11 +28,11 @@ simulated0 <- readRDS("data/outputs/simulated-scenarios-df.rds") %>%
 
 ## spatial layers ====
 
-ark <- st_read("raw-data/cropland/cb_2018_us_state_20m/cb_2018_us_state_20m.shp")
+ark <- st_read("data/raw/cropland/cb_2018_us_state_20m/cb_2018_us_state_20m.shp")
 ark <- subset(ark, STUSPS == "AR")
 ark <- st_transform(ark, 5070)
 
-usa_counties <- st_read("raw-data/Elvis-Crop-Data/Arkansas_Counties_4269.shp")
+usa_counties <- st_read("data/raw/cropland/Arkansas_Counties_4269.shp")
 
 xlim_ar <- c(360000, 570000)
 

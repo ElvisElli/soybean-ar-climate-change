@@ -9,6 +9,7 @@
 ##   1  Grid simulation     02-grid-simulation-scenarios-parallel.R
 ##   2  Data analysis       03-data-analysis-6-5-26.R
 ##   3  Inspection report   04-inspection-report.R
+##   4  Simulation report   05-simulation-report.R
 ##
 ## Each phase is skipped automatically if its outputs already exist,
 ## unless FORCE_RERUN = TRUE.
@@ -18,7 +19,8 @@
 FORCE_RERUN   <- FALSE    # TRUE = re-run every phase even if outputs exist
 RUN_SIM       <- TRUE     # Phase 1: APSIM grid simulation
 RUN_ANALYSIS  <- TRUE     # Phase 2: data analysis + manuscript figures
-RUN_REPORT    <- TRUE     # Phase 3: PDF inspection report
+RUN_REPORT    <- TRUE     # Phase 3: PDF inspection report (scientific)
+RUN_SIM_REPORT <- TRUE    # Phase 4: PDF simulation run report (technical)
 
 ## ── Helpers ──────────────────────────────────────────────────────────────
 .ts <- function() format(Sys.time(), "%H:%M:%S")
@@ -93,10 +95,21 @@ if (RUN_REPORT) {
   )
 }
 
+## ── Phase 4: Simulation run report ───────────────────────────────────────
+if (RUN_SIM_REPORT) {
+  run_phase(
+    phase        = "4",
+    title        = "Simulation run report (technical)",
+    output_check = "plots/simulation-report.pdf",
+    script       = "code/05-simulation-report.R"
+  )
+}
+
 ## ── Summary ───────────────────────────────────────────────────────────────
 cat(paste(rep("═", 72), collapse = ""), "\n")
 cat(sprintf("[%s] All phases complete.\n", .ts()))
-cat(sprintf("  Manuscript figures : plots/\n"))
-cat(sprintf("  Inspection report  : plots/inspection-report.pdf\n"))
-cat(sprintf("  Simulation results : intermediate-data/simulated-scenarios-df.rds\n"))
+cat(sprintf("  Manuscript figures   : plots/\n"))
+cat(sprintf("  Inspection report    : plots/inspection-report.pdf\n"))
+cat(sprintf("  Simulation report    : plots/simulation-report.pdf\n"))
+cat(sprintf("  Simulation results   : intermediate-data/simulated-scenarios-df.rds\n"))
 cat(paste(rep("═", 72), collapse = ""), "\n\n")

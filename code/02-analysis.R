@@ -32,7 +32,7 @@ simulated0 %>%
   summarise(
     n_rows  = n(),
     n_cells = n_distinct(cellid),
-    n_years = n_distinct(Date),
+    n_years = n_distinct(lubridate::year(Date)),
     .groups = "drop"
   ) %>%
   arrange(desc(n_rows))

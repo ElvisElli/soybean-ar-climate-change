@@ -32,9 +32,9 @@ results <- readRDS(results_path) %>% as_tibble()
 total_cells      <- n_distinct(results$cellid)
 total_scenarios  <- n_distinct(results$scenario)
 total_rows       <- nrow(results)
-total_years      <- n_distinct(lubridate::year(results$Date))
-date_range       <- paste(min(lubridate::year(results$Date)),
-                          max(lubridate::year(results$Date)), sep = "–")
+total_years      <- n_distinct(lubridate::year(results$date))
+date_range       <- paste(min(lubridate::year(results$date)),
+                          max(lubridate::year(results$date)), sep = "–")
 total_time_min   <- sum(run_log$elapsed_sec, na.rm = TRUE) / 60
 total_time_hr    <- total_time_min / 60
 n_chunks         <- nrow(run_log)
@@ -107,7 +107,7 @@ yield_summary <- results %>%
   group_by(scenario, co2) %>%
   summarise(
     cells     = n_distinct(cellid),
-    years     = n_distinct(lubridate::year(Date)),
+    years     = n_distinct(lubridate::year(date)),
     mean_kg   = round(mean(Yield_kgha, na.rm = TRUE), 0),
     sd_kg     = round(sd(Yield_kgha,   na.rm = TRUE), 0),
     min_kg    = round(min(Yield_kgha,  na.rm = TRUE), 0),

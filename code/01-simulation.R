@@ -266,12 +266,23 @@ extract_sim_columns <- function(sim, sc_row, grid_row) {
 }
 
 ## ── Notification helper ───────────────────────────────────────
-send_notification <- function(subject, body) {
+## attachments: character vector of file paths to attach (PDFs, etc.)
+send_notification <- function(subject, body, attachments = NULL) {
   if (!NOTIFY) return(invisible(NULL))
   tryCatch({
     if (!requireNamespace("blastula", quietly = TRUE))
       stop("blastula not installed")
     email <- blastula::compose_email(body = blastula::md(body))
+    if (!is.null(attachments)) {
+      for (f in attachments) {
+        if (file.exists(f)) {
+          email <- blastula::add_attachment(email, file = f)
+          message("[NOTIFY] Attaching: ", basename(f))
+        } else {
+          message("[NOTIFY] Attachment not found, skipping: ", f)
+        }
+      }
+    }
     blastula::smtp_send(email,
                         from        = NOTIFY_FROM,
                         to          = NOTIFY_TO,
@@ -658,9 +669,14 @@ send_notification(
     "- Scenarios  : ", dplyr::n_distinct(final.df$scenario), "\n",
     "- Cells      : ", dplyr::n_distinct(final.df$cellid), "\n",
     "- Total time : ", total_elapsed, " min\n",
-    "- Output     : data/outputs/simulated-scenarios-df.rds\n",
+    "- Output     : data/outputs/simulated-scenarios-df.rds\n\n",
+    "PDFs attached: simulation run report + scientific inspection report.\n",
     "Machine: ", Sys.info()[["nodename"]]
-  )
+  ),
+  attachments = Filter(file.exists, c(
+    "figures/simulation-report.pdf",
+    "figures/inspection-report.pdf"
+  ))
 )
 
 ## ── Summary report ───────────────────────────────────────────

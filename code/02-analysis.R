@@ -32,7 +32,7 @@ simulated0 %>%
   summarise(
     n_rows  = n(),
     n_cells = n_distinct(cellid),
-    n_years = n_distinct(date),
+    n_years = n_distinct(Date),
     .groups = "drop"
   ) %>%
   arrange(desc(n_rows))
@@ -156,7 +156,7 @@ ggsave("figures/p1 - climate change without adaptation.tiff", plot = plot1,
 
 weather.char <- simulated0 %>%
   filter(scenario %in% c("climate_change"), co2 %in% c("350")) %>%
-  mutate(year = year(date)) %>%
+  mutate(year = year(Date)) %>%
   ungroup() %>%
   mutate(
     Rain.avg    = mean(SeasonRain),
@@ -184,19 +184,19 @@ weather.char %>%
 
 simulated0 %>%
   filter(scenario %in% c("baseline"), co2 %in% c("350")) %>%
-  mutate(year = year(date)) %>%
+  mutate(year = year(Date)) %>%
   ungroup() %>%
   summarise(Rain.avg = mean(SeasonRain), Meat.avg = mean(SeasonMeanT))
 
 temp.range <- simulated0 %>%
   filter(scenario %in% c("baseline"), co2 %in% c("350")) %>%
-  mutate(year = year(date)) %>%
+  mutate(year = year(Date)) %>%
   group_by(x, y) %>%
   summarise(Meat.avg = mean(SeasonMeanT))
 
 soil.range <- simulated0 %>%
   filter(scenario %in% c("baseline"), co2 %in% c("350")) %>%
-  mutate(year = year(date)) %>%
+  mutate(year = year(Date)) %>%
   group_by(x, y) %>%
   summarise(swhc_mm_mm = mean((swhc_12in * 2.54) / 30))
 
@@ -267,14 +267,14 @@ ggsave("figures/p2 - temperature impacts.tiff", plot = temp.plot,
 baseline <- simulated0 %>%
   filter(scenario %in% c("baseline")) %>%
   rename(baseline = Yield_kgha) %>%
-  select(x, y, date, baseline)
+  select(x, y, Date, baseline)
 
 p3 <- simulated0 %>%
   filter(!scenario %in% c("baseline")) %>%
-  select(x, y, scenario, co2, date, Yield_kgha) %>%
+  select(x, y, scenario, co2, Date, Yield_kgha) %>%
   pivot_wider(values_from = Yield_kgha, names_from = scenario) %>%
-  left_join(baseline, by = c("x", "y", "date")) %>%
-  rename(time = date) %>%
+  left_join(baseline, by = c("x", "y", "Date")) %>%
+  rename(time = Date) %>%
   mutate(
     climate_change          = (climate_change - baseline) / baseline * 100,
     early_sowing            = (early_sowing - baseline) / baseline * 100,
@@ -437,7 +437,7 @@ ggsave("figures/p5 - climate change with adaptation - merged.tiff", plot = plot5
 
 p5a0 <- simulated0 %>%
   filter(scenario %in% c("baseline"), co2 %in% c("350")) %>%
-  mutate(year = year(date)) %>%
+  mutate(year = year(Date)) %>%
   group_by(x, y, scenario, co2, year) %>%
   ungroup() %>%
   mutate(
@@ -461,7 +461,7 @@ p5a0 <- simulated0 %>%
 
 p5a <- simulated0 %>%
   filter(scenario %in% c("baseline"), co2 %in% c("350")) %>%
-  mutate(year = year(date)) %>%
+  mutate(year = year(Date)) %>%
   select(x, y, year, SeasonMeanT, SeasonRain) %>%
   left_join(p5a0) %>%
   filter(SeasonMeanT > 20)
@@ -516,7 +516,7 @@ plot5a <-
 
 p5b <- simulated0 %>%
   filter(scenario %in% c("baseline", "climate_change"), co2 %in% c("350")) %>%
-  mutate(year = year(date)) %>%
+  mutate(year = year(Date)) %>%
   select(x, y, scenario, co2, year, EmergenceDAS, FloweringDAS, MaturityDAS) %>%
   mutate(
     veg.per    = FloweringDAS - EmergenceDAS,

@@ -65,13 +65,20 @@ cat(sprintf("  R version   : %s\n", R.version$version.string))
 cat(sprintf("  Platform    : %s\n\n", R.version$platform))
 
 ## ── Phase 1: Simulation ───────────────────────────────────────────────────
+## Always runs when RUN_SIM = TRUE — the script handles its own resume logic
+## internally via per-chunk checkpoints.
 if (RUN_SIM) {
-  run_phase(
-    phase        = "1",
-    title        = "APSIM grid simulation",
-    output_check = "data/outputs/simulated-scenarios-df.rds",
-    script       = "code/01-simulation.R"
+  banner("1", "APSIM grid simulation")
+  t0 <- proc.time()[["elapsed"]]
+  tryCatch(
+    source("code/01-simulation.R", echo = FALSE, local = new.env(parent = globalenv())),
+    error = function(e) {
+      cat(sprintf("\n[%s] Phase 1 FAILED: %s\n", .ts(), e$message))
+      stop("Phase 1 failed — stopping master script.", call. = FALSE)
+    }
   )
+  cat(sprintf("\n[%s] Phase 1 DONE in %.1f min\n", .ts(),
+              (proc.time()[["elapsed"]] - t0) / 60))
 }
 
 ## ── Phase 2: Data analysis ────────────────────────────────────────────────

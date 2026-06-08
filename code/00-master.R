@@ -17,7 +17,7 @@
 
 ## ── Settings ─────────────────────────────────────────────────────────────
 FORCE_RERUN   <- FALSE    # TRUE = re-run every phase even if outputs exist
-RUN_SIM       <- TRUE     # Phase 1: APSIM grid simulation
+RUN_SIM       <- FALSE     # Phase 1: APSIM grid simulation
 RUN_ANALYSIS  <- TRUE     # Phase 2: data analysis + manuscript figures
 RUN_REPORT    <- TRUE     # Phase 3: PDF inspection report (scientific)
 RUN_SIM_REPORT <- TRUE    # Phase 4: PDF simulation run report (technical)

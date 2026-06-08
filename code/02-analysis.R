@@ -65,8 +65,8 @@ save_map <- function(var, label, df_stars, ark, counties, xlim = c(360000, 57000
       legend.direction = "vertical",
       legend.title     = element_text(size = 12)
     ) +
-    facet_wrap(~scenario)
-  ggsave(paste0("figures/wue_", var, ".tiff"), plot = p, width = 12, height = 15,
+    facet_wrap(~scenario,nrow = 1)
+  ggsave(paste0("figures/wue_", var, ".tiff"), plot = p, width = 30, height = 10,
          units = "cm", dpi = 600, compression = "lzw", bg = "white")
   invisible(p)
 }
@@ -608,7 +608,8 @@ ggsave("figures/p7 - phenology by scenario.tiff", plot = p7,
 ##WUE maps ====
 
 p6 <- simulated0 %>%
-  filter(scenario %in% c("baseline", "early_sowing"), co2 %in% c(350)) %>%
+  filter(#scenario %in% c("baseline", "early_sowing"), 
+         co2 %in% c(350)) %>%
   group_by(x, y, scenario, co2) %>%
   summarise(
     Yield_kgha  = mean(Yield_kgha,  na.rm = TRUE),

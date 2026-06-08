@@ -97,7 +97,7 @@ if (RUN_REPORT) {
   run_phase(
     phase        = "3",
     title        = "PDF inspection report",
-    output_check = "figures/inspection-report.pdf",
+    output_check = "reports/inspection-report.pdf",
     script       = "code/03-report-scientific.R"
   )
 }
@@ -107,7 +107,7 @@ if (RUN_SIM_REPORT) {
   run_phase(
     phase        = "4",
     title        = "Simulation run report (technical)",
-    output_check = "figures/simulation-report.pdf",
+    output_check = "reports/simulation-report.pdf",
     script       = "code/04-report-simulation.R"
   )
 }
@@ -116,7 +116,7 @@ if (RUN_SIM_REPORT) {
 cat(paste(rep("═", 72), collapse = ""), "\n")
 cat(sprintf("[%s] All phases complete.\n", .ts()))
 cat(sprintf("  Manuscript figures   : figures/\n"))
-cat(sprintf("  Inspection report    : figures/inspection-report.pdf\n"))
-cat(sprintf("  Simulation report    : figures/simulation-report.pdf\n"))
+cat(sprintf("  Inspection report    : reports/inspection-report.pdf\n"))
+cat(sprintf("  Simulation report    : reports/simulation-report.pdf\n"))
 cat(sprintf("  Simulation results   : data/outputs/simulated-scenarios-df.rds\n"))
 cat(paste(rep("═", 72), collapse = ""), "\n\n")

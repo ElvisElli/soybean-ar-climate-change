@@ -17,6 +17,7 @@ library(gghalves)
 library(scales)
 
 dir.create("figures", showWarnings = FALSE, recursive = TRUE)
+dir.create("reports", showWarnings = FALSE, recursive = TRUE)
 
 source("code/utils/plot-theme.R")
 
@@ -557,7 +558,7 @@ ggsave("figures/insp_h - RUE proxy.tiff", plot = insp_h,
 
 ## ── ASSEMBLE PDF ──────────────────────────────────────────────────────────────
 
-pdf("figures/inspection-report.pdf", width = 14, height = 10)
+pdf("reports/inspection-report.pdf", width = 14, height = 10)
 
 print(title_page)
 
@@ -589,4 +590,4 @@ print(insp_h)
 
 dev.off()
 
-message("Inspection report written to figures/inspection-report.pdf")
+message("Inspection report written to reports/inspection-report.pdf")

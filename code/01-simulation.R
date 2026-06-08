@@ -674,8 +674,8 @@ send_notification(
     "Machine: ", Sys.info()[["nodename"]]
   ),
   attachments = Filter(file.exists, c(
-    "figures/simulation-report.pdf",
-    "figures/inspection-report.pdf"
+    "reports/simulation-report.pdf",
+    "reports/inspection-report.pdf"
   ))
 )
 

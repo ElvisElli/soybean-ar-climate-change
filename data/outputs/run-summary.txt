@@ -1,21 +1,21 @@
 ================================================================
-SIMULATION SUMMARY — 2026-06-08 00:46
+SIMULATION SUMMARY — 2026-06-07 23:13
 ================================================================
-Machine    : vm (unix)
-Workers    : 3 | Chunk size: 6
-Total time : 1.1 minutes
+Machine    : CSES-M-5Z4YBY3 (windows)
+Workers    : 12 | Chunk size: 500
+Total time : 69.3 minutes
 
 ── Yield by scenario ────────────────────────────────────────
-# A tibble: 2 x 8
-  scenario         co2 cultivar sowing cells years yield_mean_kgha yield_sd_kgha
-  <chr>          <dbl> <chr>    <chr>  <int> <int>           <dbl>         <dbl>
-1 baseline         350 Purcell~ 15-May    11     1            3680             0
-2 climate_change   350 Purcell~ 15-May    11     1            3344             0
+# A tibble: 2 × 8
+  scenario         co2 cultivar   sowing cells years yield_mean_kgha yield_sd_kgha
+  <chr>          <dbl> <chr>      <chr>  <int> <int>           <dbl>         <dbl>
+1 baseline         350 PurcellMG4 15-May   962     1            4579           287
+2 climate_change   350 PurcellMG4 15-May   962     1            4276           355
 
 ── Coverage check ───────────────────────────────────────────
-# A tibble: 2 x 5
+# A tibble: 2 × 5
   scenario         co2 cells missing pct_ok
   <chr>          <dbl> <int>   <int>  <dbl>
-1 baseline         350    11       0    100
-2 climate_change   350    11       0    100
+1 baseline         350   962      38   96.2
+2 climate_change   350   962      38   96.2
 ================================================================

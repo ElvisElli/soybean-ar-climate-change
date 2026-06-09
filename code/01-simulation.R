@@ -46,7 +46,7 @@ DATE_END   <- "2024-12-31"
 
 ## ── Test mode ────────────────────────────────────────────────
 ## Set TEST_RUN <- TRUE for a quick validation before the full run.
-TEST_RUN         <- TRUE
+TEST_RUN         <- FALSE
 TEST_N_CELLS     <- 1000          # capped to available data files in cloud
 TEST_DATE_START  <- "2015-01-01"
 TEST_DATE_END    <- "2015-12-31"

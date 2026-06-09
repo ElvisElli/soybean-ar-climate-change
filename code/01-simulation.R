@@ -440,9 +440,35 @@ tryCatch({
     clusterExport(cl, c("todo_rows", "sc_row", "i", "chunks", "ci_offset"),
                   envir = environment())
 
+    ## ── Progress tracking (runs in main process via .combine) ─
+    .prog_cells_done  <- 0L
+    .prog_last_time   <- proc.time()[["elapsed"]]
+    .prog_total       <- nrow(todo_rows)
+    .prog_sc_t0       <- proc.time()[["elapsed"]]
+    PROGRESS_INTERVAL <- 5 * 60  # seconds
+
+    .combine_chunks <- function(acc, result) {
+      .prog_cells_done <<- .prog_cells_done + result$n_ok + result$n_fail
+      now <- proc.time()[["elapsed"]]
+      if (now - .prog_last_time >= PROGRESS_INTERVAL) {
+        rate <- if (now - .prog_sc_t0 > 0)
+          round(.prog_cells_done / (now - .prog_sc_t0) * 3600) else NA
+        cat(sprintf("[%s] PROGRESS | Sc %d/%d %-26s | %d/%d cells (%.1f%%) | %.1f min elapsed | ~%s cells/hr\n",
+          format(Sys.time(), "%H:%M:%S"), i, nrow(scenarios),
+          sc$scenario, .prog_cells_done, .prog_total,
+          .prog_cells_done / .prog_total * 100,
+          (now - .prog_sc_t0) / 60,
+          ifelse(is.na(rate), "?", format(rate, big.mark = ","))))
+        .prog_last_time <<- now
+      }
+      c(acc, list(result))
+    }
+
     ## ── Parallel chunk processing ──────────────────────────
     chunk_summaries <- foreach(
       ci             = seq_along(chunks),
+      .combine       = .combine_chunks,
+      .init          = list(),
       .errorhandling = "pass"
     ) %dopar% {
 

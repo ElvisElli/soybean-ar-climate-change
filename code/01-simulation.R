@@ -45,10 +45,24 @@ DATE_START <- "1985-01-01"
 DATE_END   <- "2024-12-31"
 
 ## ── Local data cache (optional, faster than Box Drive) ───────
-## Copy weather/ and soil/ from Box to a local SSD once (~10 GB total).
-## Files never change between runs — no need to delete after each run.
-## Set to NULL to use Box Drive (default).
-## Example: LOCAL_DATA_CACHE <- "C:/temp/soybean-data"
+## Copying from Box to a local SSD eliminates network I/O and can cut
+## runtime by 30-50%. Files never change — copy once, keep permanently.
+##
+## ONE-TIME SETUP (new machine):
+##   1. Run the block below in the R console (select all 8 lines and run):
+##
+##      local_cache <- "C:/temp/soybean-data"
+##      box_data    <- "C:/Users/efelli/Box/_Projects/Scale-Sims/soybean-ar-climate-change/intermediate-data"
+##      dir.create(local_cache, recursive = TRUE, showWarnings = FALSE)
+##      message("Copying weather files (~5 GB)...")
+##      file.copy(file.path(box_data, "weather"), local_cache, recursive = TRUE)
+##      message("Copying soil files (~5 GB)...")
+##      file.copy(file.path(box_data, "soil"), local_cache, recursive = TRUE)
+##      message("Done — set LOCAL_DATA_CACHE <- local_cache below.")
+##
+##   2. Set LOCAL_DATA_CACHE below to "C:/temp/soybean-data"
+##
+## Set to NULL to use Box Drive (default, slower).
 LOCAL_DATA_CACHE <- NULL
 
 ## ── Test mode ────────────────────────────────────────────────

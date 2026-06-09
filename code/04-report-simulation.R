@@ -137,9 +137,11 @@ table_page <- function(df, title, subtitle = NULL, fontsize = 9) {
                                     hjust = 0, x = 0)))
   }
   grobs <- c(grobs, list(tbl))
-  heights <- unit.c(unit(0.06, "npc"),
-                    if (!is.null(subtitle)) unit(0.04, "npc") else NULL,
-                    unit(1, "null"))
+  if (!is.null(subtitle)) {
+    heights <- unit.c(unit(0.06, "npc"), unit(0.04, "npc"), unit(1, "null"))
+  } else {
+    heights <- unit.c(unit(0.06, "npc"), unit(1, "null"))
+  }
   arrangeGrob(grobs = grobs, ncol = 1, heights = heights)
 }
 

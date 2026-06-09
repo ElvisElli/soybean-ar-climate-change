@@ -440,37 +440,22 @@ tryCatch({
     clusterExport(cl, c("todo_rows", "sc_row", "i", "chunks", "ci_offset"),
                   envir = environment())
 
-    ## ── Progress tracking (runs in main process via .combine) ─
-    .prog_cells_done  <- 0L
-    .prog_last_time   <- proc.time()[["elapsed"]]
-    .prog_total       <- nrow(todo_rows)
-    .prog_sc_t0       <- proc.time()[["elapsed"]]
-    PROGRESS_INTERVAL <- 5 * 60  # seconds
+    ## ── Parallel chunk processing (batched for progress updates) ──
+    PROGRESS_INTERVAL <- 5 * 60  # seconds between progress prints
+    batch_size_ch     <- max(1L, ceiling(length(chunks) / 20))  # ~20 batches per scenario
+    chunk_batches     <- split(seq_along(chunks),
+                               ceiling(seq_along(chunks) / batch_size_ch))
+    chunk_summaries   <- list()
+    prog_cells_done   <- 0L
+    prog_t0           <- proc.time()[["elapsed"]]
+    prog_last_print   <- proc.time()[["elapsed"]] - PROGRESS_INTERVAL  # print on first batch
+    prog_total        <- nrow(todo_rows)
 
-    .combine_chunks <- function(acc, result) {
-      .prog_cells_done <<- .prog_cells_done + result$n_ok + result$n_fail
-      now <- proc.time()[["elapsed"]]
-      if (now - .prog_last_time >= PROGRESS_INTERVAL) {
-        rate <- if (now - .prog_sc_t0 > 0)
-          round(.prog_cells_done / (now - .prog_sc_t0) * 3600) else NA
-        cat(sprintf("[%s] PROGRESS | Sc %d/%d %-26s | %d/%d cells (%.1f%%) | %.1f min elapsed | ~%s cells/hr\n",
-          format(Sys.time(), "%H:%M:%S"), i, nrow(scenarios),
-          sc$scenario, .prog_cells_done, .prog_total,
-          .prog_cells_done / .prog_total * 100,
-          (now - .prog_sc_t0) / 60,
-          ifelse(is.na(rate), "?", format(rate, big.mark = ","))))
-        .prog_last_time <<- now
-      }
-      c(acc, list(result))
-    }
-
-    ## ── Parallel chunk processing ──────────────────────────
-    chunk_summaries <- foreach(
-      ci             = seq_along(chunks),
-      .combine       = .combine_chunks,
-      .init          = list(),
-      .errorhandling = "pass"
-    ) %dopar% {
+    for (batch in chunk_batches) {
+      batch_results <- foreach(
+        ci             = batch,
+        .errorhandling = "pass"
+      ) %dopar% {
 
       t0       <- proc.time()[["elapsed"]]
       idx      <- chunks[[ci]]
@@ -609,7 +594,30 @@ tryCatch({
            cells_fail  = n_fail,
            elapsed_sec = round(proc.time()[["elapsed"]] - t0, 1),
            errors      = paste(err_msgs, collapse = "; "))
-    }
+      }  # end foreach body
+
+      chunk_summaries <- c(chunk_summaries, batch_results)
+
+      ## ── Progress print after each batch ───────────────
+      batch_ok <- sum(sapply(batch_results, function(x)
+        if (!inherits(x, "error")) x$cells_ok + x$cells_fail else 0L))
+      prog_cells_done <- prog_cells_done + batch_ok
+      now <- proc.time()[["elapsed"]]
+      if (now - prog_last_print >= PROGRESS_INTERVAL) {
+        elapsed_min <- (now - prog_t0) / 60
+        rate <- if (now > prog_t0) round(prog_cells_done / (now - prog_t0) * 3600) else NA
+        eta_min <- if (!is.na(rate) && rate > 0)
+          round((prog_total - prog_cells_done) / rate * 60, 1) else NA
+        cat(sprintf("[%s] PROGRESS | Sc %d/%d %-24s | %d/%d cells (%.1f%%) | %.1f min | ~%s cells/hr | ETA ~%.0f min\n",
+          format(Sys.time(), "%H:%M:%S"), i, nrow(scenarios), sc_row$scenario,
+          prog_cells_done, prog_total,
+          prog_cells_done / max(prog_total, 1) * 100,
+          elapsed_min,
+          ifelse(is.na(rate), "?", format(rate, big.mark = ",")),
+          ifelse(is.na(eta_min), NA, eta_min)))
+        prog_last_print <- now
+      }
+    }  # end batch loop
 
     ## ── Log chunk summaries ────────────────────────────
     for (cs in chunk_summaries) {

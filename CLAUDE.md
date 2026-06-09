@@ -26,6 +26,9 @@ The script is **fully resumable** — re-run any time; completed chunks are skip
 | `CHUNK_SIZE` | 50 | cells per parallel task |
 | `DATE_START/END` | 1985–2024 | simulation clock |
 | Cores | `nCores - 2` | leaves 2 free for OS |
+| `LOCAL_DATA_CACHE` | `NULL` | Optional local SSD path for weather/soil files |
+
+**Performance tip — local data cache:** Box Drive network latency is the main bottleneck on Windows (CPU sits at ~50% instead of ~100%). Copy `weather/` and `soil/` from Box to a local SSD once (~10 GB total) and set `LOCAL_DATA_CACHE <- "C:/temp/soybean-data"` in `01-simulation.R`. Files never change between runs — no need to delete. This can cut runtime by 30–50%.
 
 ## Environment auto-detection
 

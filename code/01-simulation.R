@@ -44,6 +44,13 @@ CHUNK_SIZE <- 50          # cells per parallel task
 DATE_START <- "1985-01-01"
 DATE_END   <- "2024-12-31"
 
+## ── Local data cache (optional, faster than Box Drive) ───────
+## Copy weather/ and soil/ from Box to a local SSD once (~10 GB total).
+## Files never change between runs — no need to delete after each run.
+## Set to NULL to use Box Drive (default).
+## Example: LOCAL_DATA_CACHE <- "C:/temp/soybean-data"
+LOCAL_DATA_CACHE <- NULL
+
 ## ── Test mode ────────────────────────────────────────────────
 ## Set TEST_RUN <- TRUE for a quick validation before the full run.
 TEST_RUN         <- FALSE
@@ -136,9 +143,12 @@ if (!is.null(ENV$apsim_exe)) {
 }
 
 ## ── Data paths ───────────────────────────────────────────────
-## On Windows, Box root = .../intermediate-data/ and weather/soil sit directly inside.
-## On Linux,   repo data/raw/weather and data/raw/soil are used.
-if (!is.null(ENV$box_root)) {
+## Priority: LOCAL_DATA_CACHE > Box Drive > repo data/raw/
+if (!is.null(LOCAL_DATA_CACHE) && dir.exists(LOCAL_DATA_CACHE)) {
+  weather_path <- normalizePath(file.path(LOCAL_DATA_CACHE, "weather"), mustWork = FALSE)
+  soil_path    <- normalizePath(file.path(LOCAL_DATA_CACHE, "soil"),    mustWork = FALSE)
+  message("[PATHS] Using local cache: ", LOCAL_DATA_CACHE)
+} else if (!is.null(ENV$box_root)) {
   weather_path <- normalizePath(file.path(ENV$box_root, "weather"), mustWork = FALSE)
   soil_path    <- normalizePath(file.path(ENV$box_root, "soil"),    mustWork = FALSE)
 } else {

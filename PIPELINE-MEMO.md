@@ -100,7 +100,34 @@ if (os == "windows") {
 
 ---
 
-## 3. APSIM Template Version Compatibility
+## 3. Local Data Cache (Performance)
+
+**Problem:** Box Drive network latency keeps CPU at ~50% instead of ~100% — workers spend more
+time waiting on I/O than running APSIM.
+
+**Solution:** Copy weather and soil files to a local SSD once and point the script there.
+
+```r
+# One-time copy (run in R or Windows Explorer)
+file.copy("C:/Users/.../Box/.../intermediate-data/weather",
+          "C:/temp/soybean-data", recursive = TRUE)
+file.copy("C:/Users/.../Box/.../intermediate-data/soil",
+          "C:/temp/soybean-data", recursive = TRUE)
+
+# Then in 01-simulation.R:
+LOCAL_DATA_CACHE <- "C:/temp/soybean-data"
+```
+
+**Key lessons:**
+- ~10 GB total — negligible on a workstation with 256 GB RAM and SSD RAID
+- Files never change between runs — copy once, keep permanently
+- Can cut runtime by 30–50% by eliminating Box Drive latency
+- Set `LOCAL_DATA_CACHE <- NULL` to revert to Box Drive (e.g. on a new machine before copying)
+- Priority order in script: local cache → Box Drive → repo `data/raw/`
+
+---
+
+## 5. APSIM Template Version Compatibility
 
 **Problem:** "File version is greater than the latest file version" error — APSIM
 refuses to open a `.apsimx` file saved by a newer version.
@@ -115,7 +142,7 @@ not the latest one.
 
 ---
 
-## 4. Path Spaces — The #1 Source of Errors
+## 6. Path Spaces — The #1 Source of Errors
 
 The `apsimx` R package rejects any path containing a space.
 
@@ -130,7 +157,7 @@ contain a space. Always wrap with `utils::shortPathName()` on Windows.
 
 ---
 
-## 5. Parallel Simulation Design
+## 7. Parallel Simulation Design
 
 ### Per-cell isolated directories (critical pattern)
 Each cell gets its own subdirectory so workers never collide on `.db` files:
@@ -181,7 +208,7 @@ sim <- tryCatch(
 
 ---
 
-## 6. Resume / Checkpoint System
+## 8. Resume / Checkpoint System
 
 ### Chunk file naming
 ```
@@ -204,7 +231,7 @@ cells_todo  <- setdiff(all_cells, done_cellids)
 
 ---
 
-## 7. Test Mode
+## 9. Test Mode
 
 Always build a test mode controlled by flags at the top of the script:
 
@@ -231,7 +258,7 @@ if (TEST_RUN) {
 
 ---
 
-## 8. Soil Profile Preparation
+## 10. Soil Profile Preparation
 
 Standard pattern used for every cell:
 
@@ -262,7 +289,7 @@ APSIM errors if they are longer than the number of soil layers.
 
 ---
 
-## 9. Email Notifications
+## 11. Email Notifications
 
 Uses `blastula` + Gmail App Password + system keyring (one-time setup per machine):
 
@@ -293,7 +320,7 @@ Send to a regular email instead (`eelli@uark.edu`).
 
 ---
 
-## 10. Master Script Pattern
+## 12. Master Script Pattern
 
 A `00-master.R` that runs all phases in sequence with smart skipping:
 
@@ -326,7 +353,7 @@ run_phase("4", "Simulation report",  "figures/simulation-report.pdf",
 
 ---
 
-## 11. Output Reports
+## 13. Output Reports
 
 | Script | Output | Contents |
 |--------|--------|----------|
@@ -359,7 +386,7 @@ run_phase("4", "Simulation report",  "figures/simulation-report.pdf",
 
 ---
 
-## 12. Diagnostics Script
+## 14. Diagnostics Script
 
 `code/diagnose-windows.R` — run this first on any new Windows machine to trace
 exactly what APSIM does step by step. It:
@@ -374,7 +401,7 @@ exactly what APSIM does step by step. It:
 
 ---
 
-## 13. .gitignore Essentials
+## 15. .gitignore Essentials
 
 ```
 intermediate-data/apsim-work/    # temp cell working dirs
@@ -388,7 +415,7 @@ Track: `sim-run-log.csv`, `run-summary.txt`, `simulated-scenarios-df.rds`,
 
 ---
 
-## 14. Required R Packages
+## 16. Required R Packages
 
 **Simulation:** `apsimx`, `doParallel`, `foreach`, `parallel`, `dplyr`,
 `readr`, `readxl`, `DBI`, `RSQLite`
@@ -400,7 +427,7 @@ Track: `sim-run-log.csv`, `run-summary.txt`, `simulated-scenarios-df.rds`,
 
 ---
 
-## 15. Checklist for a New Similar Project
+## 17. Checklist for a New Similar Project
 
 - [ ] Create repo with same folder structure
 - [ ] Write `CLAUDE.md` describing the project for AI assistance

@@ -24,7 +24,8 @@ source("code/utils/plot-theme.R")
 ## load data ====
 
 simulated0 <- readRDS("data/outputs/simulated-scenarios-df.rds") %>%
-  as_tibble()
+  as_tibble() %>%
+  rename(any_of(c(date = "Date")))
 
 ## spatial layers ====
 

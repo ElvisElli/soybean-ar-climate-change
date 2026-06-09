@@ -25,7 +25,7 @@ if (!file.exists(results_path)) stop("Results file not found: ", results_path)
 run_log <- read_csv(log_path, show_col_types = FALSE) %>%
   mutate(timestamp = as.POSIXct(timestamp))
 
-results <- readRDS(results_path) %>% as_tibble()
+results <- readRDS(results_path) %>% as_tibble() %>% rename(any_of(c(date = "Date")))
 
 ## ── Summary stats ────────────────────────────────────────────────────────
 

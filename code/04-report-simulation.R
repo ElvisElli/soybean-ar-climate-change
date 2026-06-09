@@ -167,16 +167,6 @@ cover_lines <- c(
   sprintf("  Simulation end    : %s",          run_end)
 )
 
-cover_page <- ggdraw <- {
-  grid.newpage()
-  grid.text("Soybean AR Climate-Change — Simulation Run Report",
-            x = 0.5, y = 0.93, just = "centre",
-            gp = gpar(fontsize = 18, fontface = "bold"))
-  grid.text(paste(cover_lines, collapse = "\n"),
-            x = 0.08, y = 0.73, just = c("left", "top"),
-            gp = gpar(fontsize = 11, fontfamily = "mono"))
-}
-
 ## ── Assemble PDF ─────────────────────────────────────────────────────────
 
 out_pdf <- "reports/simulation-report.pdf"
@@ -192,11 +182,13 @@ grid.text(paste(cover_lines, collapse = "\n"),
           gp = gpar(fontsize = 11, fontfamily = "mono"))
 
 ## Page 2 — scenario definitions
+grid.newpage()
 grid.draw(table_page(sc_defs,
   title    = "Scenario Definitions",
   subtitle = "Treatments simulated across the full grid"))
 
 ## Page 3 — per-scenario timing summary
+grid.newpage()
 grid.draw(table_page(scenario_timing,
   title    = "Simulation Timing by Scenario",
   subtitle = "Aggregated from per-chunk run log (data/outputs/sim-run-log.csv)",
@@ -209,6 +201,7 @@ n_batches  <- ceiling(chunk_rows / batch_size)
 for (i in seq_len(n_batches)) {
   rows <- ((i - 1) * batch_size + 1):min(i * batch_size, chunk_rows)
   sub  <- if (n_batches > 1) paste0("(part ", i, " of ", n_batches, ")") else NULL
+  grid.newpage()
   grid.draw(table_page(chunk_detail[rows, ],
     title    = "Per-Chunk Timing Detail",
     subtitle = sub,
@@ -216,6 +209,7 @@ for (i in seq_len(n_batches)) {
 }
 
 ## Page 5 — yield summary
+grid.newpage()
 grid.draw(table_page(yield_summary,
   title    = "Simulated Yield Summary by Scenario",
   subtitle = "Mean, SD, min, and max yield (kg/ha) across all cells and years",

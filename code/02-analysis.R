@@ -331,22 +331,21 @@ plot3.1 <-
                  fill = as.factor(co2), colour = as.factor(co2))) +
   geom_abline(intercept = 0, slope = 0, linetype = "dashed") +
   geom_half_violin(
+    aes(group = interaction(factor(scenario), as.factor(co2))),
     side     = "l",
     trim     = FALSE,
-    nudge    = 0.03,
     alpha    = 0.4,
-    width    = 1,
     colour   = NA,
-    size     = 0.5,
     position = position_dodge(width = 0.6)
   ) +
   geom_half_boxplot(
-    side         = "r",
-    position     = position_dodge(width = 0.6),
+    aes(group = interaction(factor(scenario), as.factor(co2))),
+    side          = "r",
+    position      = position_dodge(width = 0.6),
     outlier.shape = NA,
-    width        = 0.6,
-    color        = "black",
-    size         = 0.5
+    width         = 0.5,
+    color         = "black",
+    size          = 0.5
   ) +
   temp +
   scale_colour_manual(values = c("#4dac26", "#d01c8b"),

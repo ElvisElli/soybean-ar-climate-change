@@ -389,6 +389,7 @@ insp_a <- insp_a_data %>%
   scale_colour_manual(values = c("350" = "#4dac26", "540" = "#d01c8b")) +
   scale_fill_manual(values   = c("350" = "#4dac26", "540" = "#d01c8b")) +
   scale_y_discrete(expand = expansion(mult = c(0, 0.4))) +
+  coord_cartesian(clip = "off") +
   theme(legend.position = "top")
 
 ggsave("figures/insp_a - seed filling duration.tiff", plot = insp_a,
@@ -560,6 +561,7 @@ ggsave("figures/insp_h - RUE proxy.tiff", plot = insp_h,
 
 ## ── ASSEMBLE PDF ──────────────────────────────────────────────────────────────
 
+while (dev.cur() > 1) dev.off()  # close any stray devices left by ggsave
 pdf("reports/inspection-report.pdf", width = 14, height = 10)
 
 print(title_page)

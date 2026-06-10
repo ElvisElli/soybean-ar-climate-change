@@ -683,23 +683,14 @@ cat(sprintf("\n[DONE] %d rows | %d scenarios | %d cells | %.1f min\n",
             dplyr::n_distinct(final.df$cellid),
             total_elapsed))
 
-send_notification(
-  subject = sprintf("Soybean sim COMPLETE — %.0f min | %s",
-                    total_elapsed, Sys.info()[["nodename"]]),
-  body    = paste0(
-    "**All scenarios complete!**\n\n",
-    "- Total rows : ", nrow(final.df), "\n",
-    "- Scenarios  : ", dplyr::n_distinct(final.df$scenario), "\n",
-    "- Cells      : ", dplyr::n_distinct(final.df$cellid), "\n",
-    "- Total time : ", total_elapsed, " min\n",
-    "- Output     : data/outputs/simulated-scenarios-df.rds\n\n",
-    "PDFs attached: simulation run report + scientific inspection report.\n",
-    "Machine: ", Sys.info()[["nodename"]]
-  ),
-  attachments = Filter(file.exists, c(
-    "reports/simulation-report.pdf",
-    "reports/inspection-report.pdf"
-  ))
+## Final email is sent by 00-master.R after PDF reports are generated.
+## Store summary stats so master can include them in the notification.
+sim_summary_for_notify <- list(
+  total_rows      = nrow(final.df),
+  n_scenarios     = dplyr::n_distinct(final.df$scenario),
+  n_cells         = dplyr::n_distinct(final.df$cellid),
+  total_elapsed   = total_elapsed,
+  nodename        = Sys.info()[["nodename"]]
 )
 
 ## ── Summary report ───────────────────────────────────────────

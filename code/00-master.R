@@ -120,3 +120,25 @@ cat(sprintf("  Inspection report    : reports/inspection-report.pdf\n"))
 cat(sprintf("  Simulation report    : reports/simulation-report.pdf\n"))
 cat(sprintf("  Simulation results   : data/outputs/simulated-scenarios-df.rds\n"))
 cat(paste(rep("═", 72), collapse = ""), "\n\n")
+
+## ── Final email notification (after PDFs are ready) ───────────────────────
+if (RUN_SIM && exists("send_notification") && exists("sim_summary_for_notify")) {
+  s <- sim_summary_for_notify
+  send_notification(
+    subject = sprintf("Soybean sim COMPLETE — %.0f min | %s",
+                      s$total_elapsed, s$nodename),
+    body = paste0(
+      "**All scenarios complete — PDFs attached!**\n\n",
+      "- Total rows : ", s$total_rows,      "\n",
+      "- Scenarios  : ", s$n_scenarios,     "\n",
+      "- Cells      : ", s$n_cells,         "\n",
+      "- Total time : ", s$total_elapsed, " min\n",
+      "- Output     : data/outputs/simulated-scenarios-df.rds\n\n",
+      "Machine: ", s$nodename
+    ),
+    attachments = Filter(file.exists, c(
+      "reports/simulation-report.pdf",
+      "reports/inspection-report.pdf"
+    ))
+  )
+}

@@ -466,7 +466,7 @@ p5a <- simulated0 %>%
   filter(scenario %in% c("baseline"), co2 %in% c("350")) %>%
   mutate(year = year(date)) %>%
   select(x, y, year, SeasonMeanT, SeasonRain) %>%
-  left_join(p5a0) %>%
+  left_join(p5a0, by = c("x", "y", "year")) %>%
   filter(SeasonMeanT > 20)
 
 temp_response <- data.frame(temp = seq(10, 40, 0.1)) %>%
@@ -527,7 +527,7 @@ p5b <- simulated0 %>%
     whole.cycle = MaturityDAS - EmergenceDAS
   ) %>%
   ungroup() %>%
-  left_join(p5a0) %>%
+  left_join(p5a0, by = c("x", "y", "year")) %>%
   filter(!is.na(weather.class)) %>%
   mutate(
     scenario = as.factor(scenario),
@@ -575,6 +575,7 @@ p6b <- p6b_data %>%
   scale_colour_manual(values = c("350" = "#4dac26", "540" = "#d01c8b")) +
   scale_fill_manual(values  = c("350" = "#4dac26", "540" = "#d01c8b")) +
   scale_y_discrete(expand = expansion(mult = c(0, 0.4))) +
+  coord_cartesian(clip = "off") +
   theme(legend.position = "top")
 
 ggsave("figures/p6b - seed filling duration.tiff", plot = p6b,

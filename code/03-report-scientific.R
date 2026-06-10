@@ -302,7 +302,7 @@ p5a <- simulated0 %>%
   filter(scenario %in% c("baseline"), co2 %in% c("350")) %>%
   mutate(year = year(date)) %>%
   select(x, y, year, SeasonMeanT, SeasonRain) %>%
-  left_join(p5a0) %>%
+  left_join(p5a0, by = c("x", "y", "year")) %>%
   filter(SeasonMeanT > 20)
 
 temp_response <- data.frame(temp = seq(10, 40, 0.1)) %>%
@@ -353,7 +353,7 @@ p5b_data <- simulated0 %>%
          rep.per = MaturityDAS - FloweringDAS,
          whole.cycle = MaturityDAS - EmergenceDAS) %>%
   ungroup() %>%
-  left_join(p5a0) %>%
+  left_join(p5a0, by = c("x", "y", "year")) %>%
   filter(!is.na(weather.class)) %>%
   mutate(scenario = factor(scenario, labels = c("Baseline", "2°C-increase")))
 

@@ -1,0 +1,7 @@
+# Count active APSIM instances (= cells running right now)
+apsim_procs <- shell("tasklist | findstr /i Models", intern = TRUE)
+cat("APSIM instances running:", length(apsim_procs), "\n")
+
+# Count R worker processes
+r_procs <- shell("tasklist | findstr /i Rscript", intern = TRUE)
+cat("R worker processes:     ", length(r_procs), "\n")

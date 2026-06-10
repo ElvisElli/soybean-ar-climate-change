@@ -1,21 +1,35 @@
 ================================================================
-SIMULATION SUMMARY — 2026-06-07 23:13
+SIMULATION SUMMARY — 2026-06-09 19:18
 ================================================================
-Machine    : CSES-M-5Z4YBY3 (windows)
-Workers    : 12 | Chunk size: 500
-Total time : 69.3 minutes
+Machine    : CSES-FJMJWM3 (windows)
+Workers    : 38 | Chunk size: 50
+Total time : 455.5 minutes
 
 ── Yield by scenario ────────────────────────────────────────
-# A tibble: 2 × 8
-  scenario         co2 cultivar   sowing cells years yield_mean_kgha yield_sd_kgha
-  <chr>          <dbl> <chr>      <chr>  <int> <int>           <dbl>         <dbl>
-1 baseline         350 PurcellMG4 15-May   962     1            4579           287
-2 climate_change   350 PurcellMG4 15-May   962     1            4276           355
+# A tibble: 9 × 8
+  scenario                  co2 cultivar   sowing cells years yield_mean_kgha yield_sd_kgha
+  <chr>                   <dbl> <chr>      <chr>  <int> <int>           <dbl>         <dbl>
+1 baseline                  350 PurcellMG4 15-May  4651    40            4452           336
+2 climate_change            350 PurcellMG4 15-May  4651    40            4183           383
+3 climate_change            540 PurcellMG4 15-May  4651    40            5002           400
+4 early_sowing              350 PurcellMG4 15-Apr  4651    40            4369           430
+5 early_sowing              540 PurcellMG4 15-Apr  4651    40            5183           460
+6 early_sowing_longer_mat   350 PurcellMG5 15-Apr  4651    40            4860           482
+7 early_sowing_longer_mat   540 PurcellMG5 15-Apr  4651    40            5790           514
+8 longer_mat                350 PurcellMG5 15-May  4651    40            4480           443
+9 longer_mat                540 PurcellMG5 15-May  4651    40            5385           463
 
 ── Coverage check ───────────────────────────────────────────
-# A tibble: 2 × 5
-  scenario         co2 cells missing pct_ok
-  <chr>          <dbl> <int>   <int>  <dbl>
-1 baseline         350   962      38   96.2
-2 climate_change   350   962      38   96.2
+# A tibble: 9 × 5
+  scenario                  co2 cells missing pct_ok
+  <chr>                   <dbl> <int>   <int>  <dbl>
+1 baseline                  350  4651     203   95.8
+2 climate_change            350  4651     203   95.8
+3 climate_change            540  4651     203   95.8
+4 early_sowing              350  4651     203   95.8
+5 early_sowing              540  4651     203   95.8
+6 early_sowing_longer_mat   350  4651     203   95.8
+7 early_sowing_longer_mat   540  4651     203   95.8
+8 longer_mat                350  4651     203   95.8
+9 longer_mat                540  4651     203   95.8
 ================================================================

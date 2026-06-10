@@ -51,19 +51,19 @@ DATE_END   <- "2024-12-31"
 ## ONE-TIME SETUP (new machine):
 ##   1. Run the block below in the R console (select all 8 lines and run):
 ##
-##      local_cache <- "C:/temp/soybean-data"
-##      box_data    <- "C:/Users/efelli/Box/_Projects/Scale-Sims/soybean-ar-climate-change/intermediate-data"
-##      dir.create(local_cache, recursive = TRUE, showWarnings = FALSE)
-##      message("Copying weather files (~5 GB)...")
-##      file.copy(file.path(box_data, "weather"), local_cache, recursive = TRUE)
-##      message("Copying soil files (~5 GB)...")
-##      file.copy(file.path(box_data, "soil"), local_cache, recursive = TRUE)
-##      message("Done — set LOCAL_DATA_CACHE <- local_cache below.")
+##   local_cache <- "C:/temp/soybean-data"
+##   box_data    <- "C:/Users/efelli/Box/_Projects/Scale-Sims/soybean-ar-climate-change/intermediate-data"
+##   dir.create(local_cache, recursive = TRUE, showWarnings = FALSE)
+##   message("Copying weather files (~5 GB)...")
+##   file.copy(file.path(box_data, "weather"), local_cache, recursive = TRUE)
+##   message("Copying soil files (~5 GB)...")
+##   file.copy(file.path(box_data, "soil"), local_cache, recursive = TRUE)
+##   message("Done — set LOCAL_DATA_CACHE <- local_cache below.")
 ##
 ##   2. Set LOCAL_DATA_CACHE below to "C:/temp/soybean-data"
 ##
 ## Set to NULL to use Box Drive (default, slower).
-LOCAL_DATA_CACHE <- NULL
+LOCAL_DATA_CACHE <- "C:/temp/soybean-data"
 
 ## ── Test mode ────────────────────────────────────────────────
 ## Set TEST_RUN <- TRUE for a quick validation before the full run.

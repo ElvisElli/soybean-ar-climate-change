@@ -669,13 +669,16 @@ tryCatch({
 }, finally = {
   stopCluster(cl)
   cat("\n[CLUSTER] Stopped.\n")
+
+  ## ── Final save (always runs, even on error) ──────────────
+  final.df      <<- dplyr::bind_rows(Filter(Negate(is.null), final.df))
+  total_elapsed <<- round(as.numeric(difftime(Sys.time(), run_started, units = "mins")), 1)
+  saveRDS(final.df, "data/outputs/simulated-scenarios-df.rds")
+  cat(sprintf("[SAVE] %d rows written to data/outputs/simulated-scenarios-df.rds\n",
+              nrow(final.df)))
 })
 
-## ── Final save ───────────────────────────────────────────────
-final.df     <- dplyr::bind_rows(Filter(Negate(is.null), final.df))
-total_elapsed <- round(as.numeric(difftime(Sys.time(), run_started, units = "mins")), 1)
-
-saveRDS(final.df, "data/outputs/simulated-scenarios-df.rds")
+## ── Final save already done in finally block above ───────────
 
 cat(sprintf("\n[DONE] %d rows | %d scenarios | %d cells | %.1f min\n",
             nrow(final.df),

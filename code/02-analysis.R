@@ -29,7 +29,51 @@ simulated0 <- readRDS("data/outputs/simulated-scenarios-df.rds") %>%
   as_tibble() %>%
   rename(any_of(c(date = "Date")))
 
-## Quick data check
+## ── 0b. Data inspection & quality filter ────────────────────────────────────
+## Removes rows with biologically impossible phenology before any figure is made.
+## All figures downstream use the cleaned `simulated0`.
+
+n_raw <- nrow(simulated0)
+
+## Flag each row with the reason it fails (NA = passes all checks)
+simulated0_raw <- simulated0 %>%
+  mutate(
+    .fail = case_when(
+      is.na(MaturityDAS)   | MaturityDAS   <= 0  ~ "MaturityDAS missing/zero",
+      is.na(EmergenceDAS)  | EmergenceDAS  <= 0  ~ "EmergenceDAS missing/zero",
+      is.na(FloweringDAS)  | FloweringDAS  <= 0  ~ "FloweringDAS missing/zero",
+      is.na(SeedFillingDAS)| SeedFillingDAS<= 0  ~ "SeedFillingDAS missing/zero",
+      MaturityDAS - EmergenceDAS < 60            ~ "Emergence-to-maturity < 60 days",
+      FloweringDAS  >= MaturityDAS               ~ "Flowering at or after maturity",
+      SeedFillingDAS >= MaturityDAS              ~ "Seed fill starts at or after maturity",
+      is.na(Yield_kgha) | Yield_kgha <= 0       ~ "Zero or missing yield",
+      TRUE                                       ~ NA_character_
+    )
+  )
+
+## Summary of filtered rows
+filter_summary <- simulated0_raw %>%
+  filter(!is.na(.fail)) %>%
+  count(scenario, .fail, name = "n_removed") %>%
+  arrange(scenario, desc(n_removed))
+
+n_removed <- sum(!is.na(simulated0_raw$.fail))
+
+cat(paste(rep("─", 60), collapse = ""), "\n")
+cat(sprintf("DATA QUALITY FILTER\n"))
+cat(sprintf("  Raw rows     : %d\n", n_raw))
+cat(sprintf("  Removed rows : %d (%.2f%%)\n", n_removed, n_removed / n_raw * 100))
+cat(sprintf("  Clean rows   : %d\n\n", n_raw - n_removed))
+cat("Removed rows by scenario and reason:\n")
+print(filter_summary, n = Inf)
+cat(paste(rep("─", 60), collapse = ""), "\n\n")
+
+## Apply filter — simulated0 is now clean for all figures
+simulated0 <- simulated0_raw %>%
+  filter(is.na(.fail)) %>%
+  select(-.fail)
+
+## Quick scenario coverage check after filtering
 treatment_cols <- intersect(
   c("cultivar", "sowing", "scenario", "climate.control", "co2", "rowSpacing"),
   names(simulated0)
@@ -507,32 +551,21 @@ ggsave("figures/fig08 - phenology timeline by scenario.tiff", plot = plot8,
 ## B (lower): seed-filling period change (days vs baseline)
 ## Filtered to CO2 = 350 ppm only
 
-## Minimum MaturityDAS to be considered a valid simulation (soybean can't
-## mature in fewer than ~80 days; values below this indicate a failed run)
-MIN_MATURITY_DAS <- 80
-
 p9_baseline <- simulated0 %>%
-  filter(scenario == "baseline", MaturityDAS >= MIN_MATURITY_DAS) %>%
+  filter(scenario == "baseline") %>%
   mutate(bl_sf = MaturityDAS - SeedFillingDAS,
-         bl_tc = MaturityDAS) %>%          # sowing → maturity (total season length)
+         bl_tc = MaturityDAS - EmergenceDAS) %>%   # emergence → maturity
   select(x, y, date, bl_sf, bl_tc)
 
 p9_data <- simulated0 %>%
-  filter(scenario != "baseline", co2 == 350, MaturityDAS >= MIN_MATURITY_DAS) %>%
+  filter(scenario != "baseline", co2 == 350) %>%
   mutate(sf_dur = MaturityDAS - SeedFillingDAS,
-         tc_dur = MaturityDAS) %>%          # sowing → maturity
+         tc_dur = MaturityDAS - EmergenceDAS) %>%   # emergence → maturity
   select(x, y, date, scenario, sf_dur, tc_dur) %>%
   left_join(p9_baseline, by = c("x", "y", "date")) %>%
-  filter(!is.na(bl_tc)) %>%               # drop rows with no valid baseline match
+  filter(!is.na(bl_tc)) %>%
   mutate(sf_chg = sf_dur - bl_sf,
          tc_chg = tc_dur - bl_tc)
-
-## How many rows were removed as failed simulations?
-n_raw <- simulated0 %>% filter(scenario != "baseline", co2 == 350) %>% nrow()
-n_kept <- nrow(p9_data)
-cat(sprintf("[p9] Filtered %d failed rows (MaturityDAS < %d); kept %d of %d (%.1f%%)\n",
-            n_raw - n_kept, MIN_MATURITY_DAS, n_kept, n_raw,
-            n_kept / n_raw * 100))
 
 make_pheno_map <- function(data, var, breaks, labels, colors, legend_title) {
   df <- data %>%

@@ -510,13 +510,13 @@ ggsave("figures/fig08 - phenology timeline by scenario.tiff", plot = plot8,
 p9_baseline <- simulated0 %>%
   filter(scenario == "baseline") %>%
   mutate(bl_sf = MaturityDAS - SeedFillingDAS,
-         bl_tc = MaturityDAS - EmergenceDAS) %>%
+         bl_tc = MaturityDAS) %>%          # sowing → maturity (total season length)
   select(x, y, date, bl_sf, bl_tc)
 
 p9_data <- simulated0 %>%
   filter(scenario != "baseline", co2 == 350) %>%
   mutate(sf_dur = MaturityDAS - SeedFillingDAS,
-         tc_dur = MaturityDAS - EmergenceDAS) %>%
+         tc_dur = MaturityDAS) %>%          # sowing → maturity
   select(x, y, date, scenario, sf_dur, tc_dur) %>%
   left_join(p9_baseline, by = c("x", "y", "date")) %>%
   mutate(sf_chg = sf_dur - bl_sf,

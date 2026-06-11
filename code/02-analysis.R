@@ -134,7 +134,7 @@ plot1b <- ggplot() +
 plot1 <- plot_grid(plot1a, plot1b, ncol = 1, align = "v", axis = "r",
                    labels = "AUTO", rel_heights = c(0.4, 1))
 
-ggsave("figures/p1 - climate change without adaptation.tiff", plot = plot1,
+ggsave("figures/fig01 - climate change without adaptation.tiff", plot = plot1,
        width = 20, height = 15, units = "cm", dpi = 600, compression = "lzw", bg = "white")
 
 
@@ -202,7 +202,7 @@ plot2 <- p2_data %>%
            size = 4, colour = "#008837") +
   guides(linetype = "none")
 
-ggsave("figures/p2 - temperature impacts.tiff", plot = plot2,
+ggsave("figures/fig02 - temperature impacts.tiff", plot = plot2,
        width = 15, height = 12, units = "cm", dpi = 600, compression = "lzw", bg = "white")
 
 
@@ -257,7 +257,7 @@ plot3 <- ggplot(p3_data,
   theme(legend.position = "top", axis.text.x = element_text(angle = 30, hjust = 1)) +
   scale_y_continuous(breaks = seq(-20, 40, 10), limits = c(-20, 40))
 
-ggsave("figures/p3 - climate change with adaptation - summary.tiff", plot = plot3,
+ggsave("figures/fig03 - adaptation strategies summary.tiff", plot = plot3,
        width = 15, height = 15, units = "cm", dpi = 600, compression = "lzw", bg = "white")
 
 
@@ -309,7 +309,7 @@ plot4 <- ggplot() +
     name = "Yield change (%)") +
   map_theme
 
-ggsave("figures/p4 - climate change with adaptation - map.tiff", plot = plot4,
+ggsave("figures/fig04 - adaptation strategies map.tiff", plot = plot4,
        width = 15, height = 15, units = "cm", dpi = 600, compression = "lzw", bg = "white")
 
 
@@ -388,7 +388,7 @@ plot5_merged <- plot_grid(
   labels = "AUTO", rel_widths = c(0.8, 1)
 )
 
-ggsave("figures/p5 - climate change with adaptation - merged.tiff", plot = plot5_merged,
+ggsave("figures/fig05 - adaptation strategies merged.tiff", plot = plot5_merged,
        width = 30, height = 15, units = "cm", dpi = 600, compression = "lzw", bg = "white")
 
 
@@ -479,7 +479,7 @@ plot6b <- plot6b_pheno %>%
 plot6 <- plot_grid(plot6a, plot6b, ncol = 1, align = "v", axis = "r",
                    labels = "AUTO", rel_heights = c(1, 0.6))
 
-ggsave("figures/p5 - environmental characterization.tiff", plot = plot6,
+ggsave("figures/fig06 - environmental characterization.tiff", plot = plot6,
        width = 20, height = 20, units = "cm", dpi = 600, compression = "lzw", bg = "white")
 
 
@@ -502,7 +502,7 @@ plot7 <- p7_data %>%
   coord_cartesian(clip = "off") +
   theme(legend.position = "top")
 
-ggsave("figures/p6b - seed filling duration.tiff", plot = plot7,
+ggsave("figures/fig07 - seed filling duration.tiff", plot = plot7,
        width = 18, height = 14, units = "cm", dpi = 600, compression = "lzw", bg = "white")
 
 
@@ -524,7 +524,7 @@ plot8 <- p8_data %>%
   labs(x = "Days after sowing", y = element_blank()) +
   theme(legend.position = "none", axis.text.y = element_text(size = 10))
 
-ggsave("figures/p7 - phenology by scenario.tiff", plot = plot8,
+ggsave("figures/fig08 - phenology timeline by scenario.tiff", plot = plot8,
        width = 22, height = 14, units = "cm", dpi = 600, compression = "lzw", bg = "white")
 
 
@@ -588,7 +588,7 @@ plot9b <- make_pheno_map(p9_data, "sf_chg",
 
 plot9 <- plot_grid(plot9a, plot9b, ncol = 1, align = "v", axis = "lr")
 
-ggsave("figures/p4bc - phenology change maps.tiff", plot = plot9,
+ggsave("figures/fig09 - phenology change maps.tiff", plot = plot9,
        width = 28, height = 18, units = "cm", dpi = 600, compression = "lzw", bg = "white")
 
 
@@ -607,7 +607,7 @@ save_wue_map <- function(var, label, df_stars, counties) {
     theme(axis.title = element_blank(), axis.text = element_blank(),
           legend.position = "left", legend.direction = "vertical",
           legend.title = element_text(size = 12))
-  ggsave(paste0("figures/wue_", var, ".tiff"), plot = p,
+  ggsave(paste0("figures/fig10 - water use efficiency - ", var, ".tiff"), plot = p,
          width = 30, height = 10, units = "cm", dpi = 600,
          compression = "lzw", bg = "white")
   invisible(p)

@@ -90,8 +90,8 @@ if (RUN_ANALYSIS) {
   run_phase(
     phase        = "2",
     title        = "Data analysis & manuscript figures",
-    output_check = c("figures/p1 - climate change without adaptation.tiff",
-                     "figures/p5 - environmental characterization.tiff"),
+    output_check = c("figures/fig01 - climate change without adaptation.tiff",
+                     "figures/fig06 - environmental characterization.tiff"),
     script       = "code/02-analysis.R"
   )
 }

@@ -436,7 +436,7 @@ plot5_merged <- plot_grid(plot3.1, plot4,
 ggsave("figures/p5 - climate change with adaptation - merged.tiff", plot = plot5_merged,
        width = 30, height = 15, units = "cm", dpi = 600, compression = "lzw", bg = "white")
 
-##p4b - seed-filling period change, map ====
+##p4b/p4c - phenology change maps (without elevated CO2 only) ====
 
 baseline_pheno <- simulated0 %>%
   filter(scenario == "baseline") %>%
@@ -445,10 +445,10 @@ baseline_pheno <- simulated0 %>%
   select(x, y, date, bl_sf, bl_tc)
 
 pheno_chg <- simulated0 %>%
-  filter(scenario != "baseline") %>%
+  filter(scenario != "baseline", co2 == 350) %>%
   mutate(sf_dur = MaturityDAS - SeedFillingDAS,
          tc_dur = MaturityDAS - EmergenceDAS) %>%
-  select(x, y, date, scenario, co2, sf_dur, tc_dur) %>%
+  select(x, y, date, scenario, sf_dur, tc_dur) %>%
   left_join(baseline_pheno, by = c("x", "y", "date")) %>%
   mutate(sf_chg = sf_dur - bl_sf,
          tc_chg = tc_dur - bl_tc)
@@ -459,106 +459,94 @@ make_pheno_map_df <- function(data, var, breaks, labels) {
       levels = c("climate_change", "longer_mat", "early_sowing", "early_sowing_longer_mat"),
       labels = c("2°C-increase", "Late-Maturing", "Early Sowing", "LM & ES")
     )) %>%
-    group_by(x, y, scenario, co2) %>%
+    group_by(x, y, scenario) %>%
     summarise(value = round(mean(.data[[var]], na.rm = TRUE), 1), .groups = "drop") %>%
-    mutate(
-      value_bin = cut(value, breaks = breaks, labels = labels, include.lowest = TRUE),
-      co2 = factor(as.character(co2),
-        levels = c("350", "540"),
-        labels = c("Without elevated CO2", "With elevated CO2")
-      )
-    )
+    mutate(value_bin = cut(value, breaks = breaks, labels = labels, include.lowest = TRUE))
 }
 
-p4b_df <- make_pheno_map_df(pheno_chg, "sf_chg",
-  breaks = c(-15, 0, 5, 10, 15, 30),
-  labels = c("< 0", "0–5", "5–10", "10–15", "> 15")
+pheno_colors <- c(
+  "−10 to −5" = "#b10026",
+  "−5 to 0"   = "#fc8d59",
+  "0–5"        = "#e5f5f9",
+  "5–10"       = "#99d8c9",
+  "10–15"      = "#41ae76",
+  "> 15"       = "#005824"
 )
 
-p4b_df %>%
-  mutate(positive = ifelse(value > 0, 1, 0)) %>%
-  group_by(co2, scenario) %>%
-  summarise(pct_positive = round(mean(positive, na.rm = TRUE) * 100, 1), .groups = "drop")
+cycle_colors <- c(
+  "−10 to −5" = "#b10026",
+  "−5 to 0"   = "#fc8d59",
+  "0–8"        = "#e5f5f9",
+  "8–15"       = "#99d8c9",
+  "15–22"      = "#41ae76",
+  "> 22"       = "#005824"
+)
 
-df_p4b <- st_as_stars(p4b_df, dims = c("x", "y", "scenario", "co2"), xy = c("x", "y"), proxy = TRUE)
-st_crs(df_p4b) <- "epsg:4326"
-df_p4b <- st_transform(df_p4b, 5070)
-df_p4b <- st_warp(df_p4b, df2, no_data_value = NA)
+map_theme <- theme(
+  axis.title       = element_blank(),
+  axis.text        = element_blank(),
+  legend.position  = "top",
+  legend.direction = "horizontal",
+  legend.title     = element_text(size = 11),
+  strip.text       = element_text(size = 10)
+)
+
+## helper: build stars + warp
+to_stars <- function(df) {
+  s <- st_as_stars(df, dims = c("x", "y", "scenario"), xy = c("x", "y"), proxy = TRUE)
+  st_crs(s) <- "epsg:4326"
+  s <- st_transform(s, 5070)
+  st_warp(s, df2, no_data_value = NA)
+}
+
+## p4b — seed-filling period change
+p4b_df  <- make_pheno_map_df(pheno_chg, "sf_chg",
+  breaks = c(-10, -5, 0, 5, 10, 15, 30),
+  labels = c("−10 to −5", "−5 to 0", "0–5", "5–10", "10–15", "> 15")
+)
+df_p4b  <- to_stars(p4b_df)
 
 plot4b <-
   ggplot() +
   geom_sf(data = ark, fill = "grey50", color = "black") +
   geom_stars(data = df_p4b, aes(fill = value_bin)) +
-  geom_sf(data = usa_counties, aes(geometry = geometry), fill = NA, colour = "black", linewidth = 0.5) +
+  geom_sf(data = usa_counties, fill = NA, colour = "black", linewidth = 0.5) +
   coord_sf(xlim = c(360000, 570000)) +
-  facet_grid(co2 ~ scenario) +
+  facet_wrap(~ scenario, nrow = 1) +
   temp +
-  scale_fill_manual(
-    values = c("< 0"   = "#b10026",
-               "0–5"   = "#e5f5f9",
-               "5–10"  = "#99d8c9",
-               "10–15" = "#41ae76",
-               "> 15"  = "#005824"),
-    na.value    = "grey50",
-    na.translate = FALSE,
-    name        = "Seed-filling period change (days)"
-  ) +
-  theme(
-    axis.title       = element_blank(),
-    axis.text        = element_blank(),
-    legend.position  = "top",
-    legend.direction = "horizontal",
-    legend.title     = element_text(size = 12)
-  )
+  scale_fill_manual(values = pheno_colors, na.value = "grey50", na.translate = FALSE,
+                    name = "B  Seed-filling period change (days)") +
+  map_theme
 
-ggsave("figures/p4b - seed-filling period change - map.tiff", plot = plot4b,
-       width = 15, height = 15, units = "cm", dpi = 600, compression = "lzw", bg = "white")
-
-##p4c - total cycle change, map ====
-
-p4c_df <- make_pheno_map_df(pheno_chg, "tc_chg",
-  breaks = c(-20, 0, 8, 15, 22, 35),
-  labels = c("< 0", "0–8", "8–15", "15–22", "> 22")
+## p4c — total crop cycle change
+p4c_df  <- make_pheno_map_df(pheno_chg, "tc_chg",
+  breaks = c(-10, -5, 0, 8, 15, 22, 35),
+  labels = c("−10 to −5", "−5 to 0", "0–8", "8–15", "15–22", "> 22")
 )
-
-p4c_df %>%
-  mutate(positive = ifelse(value > 0, 1, 0)) %>%
-  group_by(co2, scenario) %>%
-  summarise(pct_positive = round(mean(positive, na.rm = TRUE) * 100, 1), .groups = "drop")
-
-df_p4c <- st_as_stars(p4c_df, dims = c("x", "y", "scenario", "co2"), xy = c("x", "y"), proxy = TRUE)
-st_crs(df_p4c) <- "epsg:4326"
-df_p4c <- st_transform(df_p4c, 5070)
-df_p4c <- st_warp(df_p4c, df2, no_data_value = NA)
+df_p4c  <- to_stars(p4c_df)
 
 plot4c <-
   ggplot() +
   geom_sf(data = ark, fill = "grey50", color = "black") +
   geom_stars(data = df_p4c, aes(fill = value_bin)) +
-  geom_sf(data = usa_counties, aes(geometry = geometry), fill = NA, colour = "black", linewidth = 0.5) +
+  geom_sf(data = usa_counties, fill = NA, colour = "black", linewidth = 0.5) +
   coord_sf(xlim = c(360000, 570000)) +
-  facet_grid(co2 ~ scenario) +
+  facet_wrap(~ scenario, nrow = 1) +
   temp +
-  scale_fill_manual(
-    values = c("< 0"   = "#b10026",
-               "0–8"   = "#e5f5f9",
-               "8–15"  = "#99d8c9",
-               "15–22" = "#41ae76",
-               "> 22"  = "#005824"),
-    na.value    = "grey50",
-    na.translate = FALSE,
-    name        = "Total crop cycle change (days)"
-  ) +
-  theme(
-    axis.title       = element_blank(),
-    axis.text        = element_blank(),
-    legend.position  = "top",
-    legend.direction = "horizontal",
-    legend.title     = element_text(size = 12)
-  )
+  scale_fill_manual(values = cycle_colors, na.value = "grey50", na.translate = FALSE,
+                    name = "A  Total crop cycle change (days)") +
+  map_theme
 
-ggsave("figures/p4c - total cycle change - map.tiff", plot = plot4c,
-       width = 15, height = 15, units = "cm", dpi = 600, compression = "lzw", bg = "white")
+## merged panel: A = total cycle (upper), B = seed-fill (lower)
+plot_pheno_merged <- plot_grid(
+  plot4c, plot4b,
+  ncol        = 1,
+  align       = "v",
+  axis        = "lr"
+)
+
+ggsave("figures/p4bc - phenology change maps.tiff", plot = plot_pheno_merged,
+       width = 28, height = 18, units = "cm", dpi = 600, compression = "lzw", bg = "white")
 
 ##p5 - weather characterization ====
 

@@ -436,6 +436,142 @@ ggsave("figures/fig05 - adaptation strategies merged.tiff", plot = plot5_merged,
        width = 30, height = 15, units = "cm", dpi = 600, compression = "lzw", bg = "white")
 
 
+## ── Stats for section 3.2: Adaptive strategies ──────────────────────────────
+## Compares each adaptation scenario against:
+##   (a) baseline         → overall yield recovery relative to no-warming
+##   (b) climate_change   → incremental gain from each adaptation strategy
+## CO2 = 350 only (without elevated CO2) for clean strategy comparisons.
+
+s32_base <- simulated0 %>%
+  filter(scenario == "baseline") %>%
+  select(x, y, date,
+         yield_bl  = Yield_kgha,
+         sf_bl     = SeedFillingDAS,
+         mat_bl    = MaturityDAS,
+         emg_bl    = EmergenceDAS)
+
+s32_cc <- simulated0 %>%
+  filter(scenario == "climate_change", co2 == 350) %>%
+  select(x, y, date,
+         yield_cc  = Yield_kgha,
+         sf_cc     = SeedFillingDAS,
+         mat_cc    = MaturityDAS,
+         emg_cc    = EmergenceDAS)
+
+s32_data <- simulated0 %>%
+  filter(scenario %in% c("longer_mat", "early_sowing", "early_sowing_longer_mat"),
+         co2 == 350) %>%
+  select(x, y, date, scenario,
+         Yield_kgha, SeedFillingDAS, MaturityDAS, EmergenceDAS) %>%
+  left_join(s32_base, by = c("x", "y", "date")) %>%
+  left_join(s32_cc,   by = c("x", "y", "date")) %>%
+  mutate(
+    ## Yield changes (%)
+    yld_chg_vs_baseline = (Yield_kgha - yield_bl) / yield_bl * 100,
+    yld_chg_vs_cc       = (Yield_kgha - yield_cc) / yield_cc * 100,
+    ## Seed-filling duration (days)
+    sf_dur     = MaturityDAS - SeedFillingDAS,
+    sf_dur_bl  = mat_bl      - sf_bl,
+    sf_dur_cc  = mat_cc      - sf_cc,
+    sf_chg_vs_baseline = sf_dur - sf_dur_bl,
+    sf_chg_vs_cc       = sf_dur - sf_dur_cc,
+    ## Total cycle: emergence → maturity
+    tc_dur     = MaturityDAS - EmergenceDAS,
+    tc_dur_bl  = mat_bl      - emg_bl,
+    tc_dur_cc  = mat_cc      - emg_cc,
+    tc_chg_vs_baseline = tc_dur - tc_dur_bl,
+    tc_chg_vs_cc       = tc_dur - tc_dur_cc
+  )
+
+## Field-level means (averaged across years)
+s32_fields <- s32_data %>%
+  group_by(x, y, scenario) %>%
+  summarise(across(c(yld_chg_vs_baseline, yld_chg_vs_cc,
+                     sf_chg_vs_baseline, sf_chg_vs_cc,
+                     tc_chg_vs_baseline, tc_chg_vs_cc),
+                   ~ mean(.x, na.rm = TRUE)),
+            .groups = "drop")
+
+cat(paste(rep("─", 65), collapse = ""), "\n")
+cat("SECTION 3.2 — ADAPTIVE STRATEGIES (CO2 = 350 ppm)\n\n")
+
+## ── Yield recovery ──────────────────────────────────────────────────────────
+cat("YIELD CHANGE vs BASELINE (field means, %):\n")
+s32_fields %>%
+  group_by(scenario) %>%
+  summarise(
+    mean  = round(mean(yld_chg_vs_baseline, na.rm = TRUE), 1),
+    median = round(median(yld_chg_vs_baseline, na.rm = TRUE), 1),
+    q1    = round(quantile(yld_chg_vs_baseline, 0.25, na.rm = TRUE), 1),
+    q3    = round(quantile(yld_chg_vs_baseline, 0.75, na.rm = TRUE), 1),
+    pct_above_baseline = round(mean(yld_chg_vs_baseline > 0, na.rm = TRUE) * 100, 1),
+    .groups = "drop"
+  ) %>% print()
+
+cat("\nYIELD CHANGE vs CLIMATE_CHANGE (+2C, no adaptation, %):\n")
+s32_fields %>%
+  group_by(scenario) %>%
+  summarise(
+    mean   = round(mean(yld_chg_vs_cc, na.rm = TRUE), 1),
+    median = round(median(yld_chg_vs_cc, na.rm = TRUE), 1),
+    q1     = round(quantile(yld_chg_vs_cc, 0.25, na.rm = TRUE), 1),
+    q3     = round(quantile(yld_chg_vs_cc, 0.75, na.rm = TRUE), 1),
+    pct_above_cc = round(mean(yld_chg_vs_cc > 0, na.rm = TRUE) * 100, 1),
+    .groups = "drop"
+  ) %>% print()
+
+## ── Synergy check: combined vs sum of individual strategies ─────────────────
+cat("\nSYNERGY CHECK (combined vs sum of individual, field means):\n")
+synergy <- s32_fields %>%
+  select(x, y, scenario, yld_chg_vs_cc) %>%
+  pivot_wider(names_from = scenario, values_from = yld_chg_vs_cc) %>%
+  mutate(
+    sum_individual  = longer_mat + early_sowing,
+    synergy_effect  = early_sowing_longer_mat - sum_individual
+  )
+cat(sprintf("  Mean sum of individual strategies : %.1f%%\n",
+            mean(synergy$sum_individual, na.rm = TRUE)))
+cat(sprintf("  Mean combined strategy            : %.1f%%\n",
+            mean(synergy$early_sowing_longer_mat, na.rm = TRUE)))
+cat(sprintf("  Mean synergy effect (extra gain)  : %.1f%%\n",
+            mean(synergy$synergy_effect, na.rm = TRUE)))
+
+## ── Seed-filling duration ────────────────────────────────────────────────────
+cat("\nSEED-FILLING DURATION CHANGE vs CLIMATE_CHANGE (days, field means):\n")
+s32_fields %>%
+  group_by(scenario) %>%
+  summarise(
+    mean   = round(mean(sf_chg_vs_cc, na.rm = TRUE), 1),
+    median = round(median(sf_chg_vs_cc, na.rm = TRUE), 1),
+    max    = round(max(sf_chg_vs_cc, na.rm = TRUE), 1),
+    .groups = "drop"
+  ) %>% print()
+
+cat("\nSEED-FILLING DURATION CHANGE vs CLIMATE_CHANGE (days, all site-years):\n")
+s32_data %>%
+  group_by(scenario) %>%
+  summarise(
+    mean        = round(mean(sf_chg_vs_cc, na.rm = TRUE), 1),
+    max_gain    = round(max(sf_chg_vs_cc,  na.rm = TRUE), 1),
+    max_loss    = round(min(sf_chg_vs_cc,  na.rm = TRUE), 1),
+    pct_longer  = round(mean(sf_chg_vs_cc > 0, na.rm = TRUE) * 100, 1),
+    .groups = "drop"
+  ) %>% print()
+
+## ── Total crop cycle ─────────────────────────────────────────────────────────
+cat("\nTOTAL CROP CYCLE CHANGE vs CLIMATE_CHANGE (days, field means):\n")
+s32_fields %>%
+  group_by(scenario) %>%
+  summarise(
+    mean   = round(mean(tc_chg_vs_cc, na.rm = TRUE), 1),
+    median = round(median(tc_chg_vs_cc, na.rm = TRUE), 1),
+    max    = round(max(tc_chg_vs_cc, na.rm = TRUE), 1),
+    .groups = "drop"
+  ) %>% print()
+
+cat(paste(rep("─", 65), collapse = ""), "\n\n")
+
+
 ## ── Figure 6: Environmental characterization ─────────────────────────── ----
 ## A: Weather space (temperature vs rainfall) with APSIM phenology response curve
 ## B: Days to flowering by weather class, baseline vs +2°C
@@ -631,6 +767,17 @@ cat(sprintf("  Max lengthening: %.1f days\n",
             max(p9_cc_site_years$tc_chg, na.rm = TRUE)))
 cat(sprintf("  Mean           : %.1f days\n",
             mean(p9_cc_site_years$tc_chg, na.rm = TRUE)))
+
+## Seed-fill — site-year variation
+cat("SEED-FILLING CHANGE (all site-years — captures year-to-year variation):\n")
+cat(sprintf("  Max shortening : %.1f days\n",
+            min(p9_cc_site_years$sf_chg, na.rm = TRUE)))
+cat(sprintf("  Max lengthening: %.1f days\n",
+            max(p9_cc_site_years$sf_chg, na.rm = TRUE)))
+cat(sprintf("  Mean           : %.1f days\n",
+            mean(p9_cc_site_years$sf_chg, na.rm = TRUE)))
+cat(sprintf("  Site-years with shorter seed-fill: %.0f%%\n",
+            mean(p9_cc_site_years$sf_chg < 0, na.rm = TRUE) * 100))
 
 ## Seed-fill change by latitude zone
 cat("\nSEED-FILLING CHANGE by latitude zone (field means):\n")

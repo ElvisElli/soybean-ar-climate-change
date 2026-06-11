@@ -27,7 +27,12 @@ source("code/utils/plot-theme.R")
 ## Simulation results
 simulated0 <- readRDS("data/outputs/simulated-scenarios-df.rds") %>%
   as_tibble() %>%
-  rename(any_of(c(date = "Date")))
+  rename(any_of(c(date = "Date"))) %>%
+  ## Compute PTQ if critical-period columns are present (requires re-run with updated template)
+  ## PTQ = mean daily Radn / (mean daily T - Tbase); Tbase = 10°C (Zanon et al. 2016)
+  { if (all(c("CriticalPeriodRadn","CriticalPeriodMeanT") %in% names(.)))
+      mutate(., PTQ = CriticalPeriodRadn / (CriticalPeriodMeanT - 10))
+    else . }
 
 ## ── 0b. Data inspection & quality filter ────────────────────────────────────
 ## Removes rows with biologically impossible phenology before any figure is made.

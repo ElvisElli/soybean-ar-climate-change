@@ -589,13 +589,17 @@ make_pheno_map <- function(data, var, breaks, labels, colors, legend_title) {
 }
 
 ## ── Stats for manuscript paragraph ──────────────────────────────────────────
-## "The total crop cycle decreased on average by xx days, with values ranging
-##  from xx to xx across locations (Figure 2). The shortening of the crop cycle
-##  was observed in xx of the 4,651 fields. Seed-filling period decreased in
-##  northern environments..."
+## Target text:
+## "A shortening of the total crop cycle was observed in xx of the 4,651 fields
+##  (Figure 2A). The total crop cycle length decreased by up to xx weeks across
+##  all site-years. The seed filling period was shortened only in northern
+##  environments..."
 
-p9_cc <- p9_data %>%
-  filter(scenario == "climate_change") %>%
+p9_cc_site_years <- p9_data %>%
+  filter(scenario == "climate_change")   # one row per field × year
+
+## Field-level means (averaged across years)
+p9_cc <- p9_cc_site_years %>%
   group_by(x, y) %>%
   summarise(
     tc_chg_mean = mean(tc_chg, na.rm = TRUE),
@@ -603,40 +607,43 @@ p9_cc <- p9_data %>%
     .groups = "drop"
   )
 
-cat("\n── Figure 9 manuscript stats ──────────────────────────────\n")
-cat(sprintf("Total crop cycle change  : mean = %.1f days\n",
-            mean(p9_cc$tc_chg_mean, na.rm = TRUE)))
-cat(sprintf("  Range across locations : %.1f to %.1f days\n",
-            min(p9_cc$tc_chg_mean, na.rm = TRUE),
-            max(p9_cc$tc_chg_mean, na.rm = TRUE)))
-cat(sprintf("  Fields with shorter cycle (<0 days): %d of 4,651 (%.1f%%)\n",
-            sum(p9_cc$tc_chg_mean < 0, na.rm = TRUE),
-            mean(p9_cc$tc_chg_mean < 0, na.rm = TRUE) * 100))
-
-cat(sprintf("Seed-filling period change: mean = %.1f days\n",
-            mean(p9_cc$sf_chg_mean, na.rm = TRUE)))
-cat(sprintf("  Range across locations : %.1f to %.1f days\n",
-            min(p9_cc$sf_chg_mean, na.rm = TRUE),
-            max(p9_cc$sf_chg_mean, na.rm = TRUE)))
-cat(sprintf("  Fields with shorter seed-fill (<0 days): %d of 4,651 (%.1f%%)\n",
-            sum(p9_cc$sf_chg_mean < 0, na.rm = TRUE),
-            mean(p9_cc$sf_chg_mean < 0, na.rm = TRUE) * 100))
-
-## Seed-fill change by latitude tercile (north / central / south)
+## Latitude zones based on field-level data
 lat_breaks <- quantile(p9_cc$y, probs = c(0, 1/3, 2/3, 1), na.rm = TRUE)
 p9_cc <- p9_cc %>%
   mutate(lat_zone = cut(y, breaks = lat_breaks, include.lowest = TRUE,
                         labels = c("South", "Central", "North")))
-cat("\nSeed-filling change by latitude zone:\n")
+
+cat("\n── Figure 9 manuscript stats ──────────────────────────────\n")
+
+## Total crop cycle — field level (mean across years)
+cat("TOTAL CROP CYCLE CHANGE (field means across years):\n")
+cat(sprintf("  Fields with shorter cycle: %d of %d (%.0f%%)\n",
+            sum(p9_cc$tc_chg_mean < 0, na.rm = TRUE),
+            nrow(p9_cc),
+            mean(p9_cc$tc_chg_mean < 0, na.rm = TRUE) * 100))
+
+## Total crop cycle — site-year level (variation across fields AND years)
+cat("TOTAL CROP CYCLE CHANGE (all site-years — captures year-to-year variation):\n")
+cat(sprintf("  Max shortening : %.1f days (%.1f weeks)\n",
+            min(p9_cc_site_years$tc_chg, na.rm = TRUE),
+            min(p9_cc_site_years$tc_chg, na.rm = TRUE) / 7))
+cat(sprintf("  Max lengthening: %.1f days\n",
+            max(p9_cc_site_years$tc_chg, na.rm = TRUE)))
+cat(sprintf("  Mean           : %.1f days\n",
+            mean(p9_cc_site_years$tc_chg, na.rm = TRUE)))
+
+## Seed-fill change by latitude zone
+cat("\nSEED-FILLING CHANGE by latitude zone (field means):\n")
 p9_cc %>%
   group_by(lat_zone) %>%
   summarise(
-    n          = n(),
-    mean_sf_chg = round(mean(sf_chg_mean, na.rm = TRUE), 1),
+    n_fields     = n(),
+    mean_sf_chg  = round(mean(sf_chg_mean, na.rm = TRUE), 1),
     pct_negative = round(mean(sf_chg_mean < 0, na.rm = TRUE) * 100, 1),
     .groups = "drop"
   ) %>%
   print()
+
 cat("───────────────────────────────────────────────────────────\n\n")
 
 ## Panel A — total cycle change: one negative bin "-8 to 0" mirrors the first

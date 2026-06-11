@@ -465,21 +465,21 @@ make_pheno_map_df <- function(data, var, breaks, labels) {
 }
 
 pheno_colors <- c(
-  "−10 to −5" = "#b10026",
-  "−5 to 0"   = "#fc8d59",
-  "0–5"        = "#e5f5f9",
-  "5–10"       = "#99d8c9",
-  "10–15"      = "#41ae76",
-  "> 15"       = "#005824"
+  "-10 to -5" = "#b10026",
+  "-5 to 0"   = "#fc8d59",
+  "0 to 5"    = "#e5f5f9",
+  "5 to 10"   = "#99d8c9",
+  "10 to 15"  = "#41ae76",
+  "> 15"      = "#005824"
 )
 
 cycle_colors <- c(
-  "−10 to −5" = "#b10026",
-  "−5 to 0"   = "#fc8d59",
-  "0–8"        = "#e5f5f9",
-  "8–15"       = "#99d8c9",
-  "15–22"      = "#41ae76",
-  "> 22"       = "#005824"
+  "-10 to -5" = "#b10026",
+  "-5 to 0"   = "#fc8d59",
+  "0 to 8"    = "#e5f5f9",
+  "8 to 15"   = "#99d8c9",
+  "15 to 22"  = "#41ae76",
+  "> 22"      = "#005824"
 )
 
 map_theme <- theme(
@@ -487,7 +487,7 @@ map_theme <- theme(
   axis.text        = element_blank(),
   legend.position  = "top",
   legend.direction = "horizontal",
-  legend.title     = element_text(size = 11),
+  legend.title     = element_text(size = 11, hjust = 0),
   strip.text       = element_text(size = 10)
 )
 
@@ -502,7 +502,7 @@ to_stars <- function(df) {
 ## p4b — seed-filling period change
 p4b_df  <- make_pheno_map_df(pheno_chg, "sf_chg",
   breaks = c(-10, -5, 0, 5, 10, 15, 30),
-  labels = c("−10 to −5", "−5 to 0", "0–5", "5–10", "10–15", "> 15")
+  labels = c("-10 to -5", "-5 to 0", "0 to 5", "5 to 10", "10 to 15", "> 15")
 )
 df_p4b  <- to_stars(p4b_df)
 
@@ -521,7 +521,7 @@ plot4b <-
 ## p4c — total crop cycle change
 p4c_df  <- make_pheno_map_df(pheno_chg, "tc_chg",
   breaks = c(-10, -5, 0, 8, 15, 22, 35),
-  labels = c("−10 to −5", "−5 to 0", "0–8", "8–15", "15–22", "> 22")
+  labels = c("-10 to -5", "-5 to 0", "0 to 8", "8 to 15", "15 to 22", "> 22")
 )
 df_p4c  <- to_stars(p4c_df)
 

@@ -26,11 +26,9 @@ source("code/utils/plot-theme.R")
 
 ## Simulation results
 simulated0 <- readRDS("data/outputs/simulated-scenarios-df.rds")
-## Coerce to plain data.frame (handles data.table or list subclasses from saveRDS)
-simulated0 <- as.data.frame(simulated0)
-## Drop columns with empty or NA names (from APSIM cbind of computed variables)
-.ok <- nzchar(names(simulated0)) & !is.na(names(simulated0))
-if (!all(.ok)) simulated0 <- simulated0[, .ok, drop = FALSE]
+## RDS may be a list of per-scenario data frames (if saved before bind_rows)
+if (is.list(simulated0) && !is.data.frame(simulated0))
+  simulated0 <- dplyr::bind_rows(Filter(Negate(is.null), simulated0))
 simulated0 <- as_tibble(simulated0) %>%
   rename(any_of(c(date = "Date"))) %>%
   ## Compute PTQ if critical-period columns are present (requires re-run with updated template)

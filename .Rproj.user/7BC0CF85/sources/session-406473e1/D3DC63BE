@@ -1,0 +1,26 @@
+{
+    "id": "D3DC63BE",
+    "path": "~/GitHub/soybean-ar-climate-change/code/02-analysis.R",
+    "project_path": "code/02-analysis.R",
+    "type": "r_source",
+    "hash": "1845608402",
+    "contents": "",
+    "dirty": false,
+    "created": 1781190118655.0,
+    "source_on_save": false,
+    "relative_order": 1,
+    "properties": {
+        "source_window_id": "",
+        "Source": "Source",
+        "cursorPosition": "459,0",
+        "scrollLine": "433"
+    },
+    "folds": "0|3|2|52|\n3|3|82|0|\n65|37|70|0|\n83|75|139|0|\n140|75|207|0|\n208|75|262|0|\n263|75|314|0|\n315|75|393|0|\n482|75|503|0|\n504|75|567|0|\n524|77|543|0|\n568|76|617|0|\n571|58|587|0|\n",
+    "lastKnownWriteTime": 1781190986,
+    "encoding": "UTF-8",
+    "collab_server": "",
+    "source_window": "",
+    "last_content_update": 1781190986906,
+    "read_only": false,
+    "read_only_alternatives": []
+}

@@ -507,20 +507,32 @@ ggsave("figures/fig08 - phenology timeline by scenario.tiff", plot = plot8,
 ## B (lower): seed-filling period change (days vs baseline)
 ## Filtered to CO2 = 350 ppm only
 
+## Minimum MaturityDAS to be considered a valid simulation (soybean can't
+## mature in fewer than ~80 days; values below this indicate a failed run)
+MIN_MATURITY_DAS <- 80
+
 p9_baseline <- simulated0 %>%
-  filter(scenario == "baseline") %>%
+  filter(scenario == "baseline", MaturityDAS >= MIN_MATURITY_DAS) %>%
   mutate(bl_sf = MaturityDAS - SeedFillingDAS,
          bl_tc = MaturityDAS) %>%          # sowing → maturity (total season length)
   select(x, y, date, bl_sf, bl_tc)
 
 p9_data <- simulated0 %>%
-  filter(scenario != "baseline", co2 == 350) %>%
+  filter(scenario != "baseline", co2 == 350, MaturityDAS >= MIN_MATURITY_DAS) %>%
   mutate(sf_dur = MaturityDAS - SeedFillingDAS,
          tc_dur = MaturityDAS) %>%          # sowing → maturity
   select(x, y, date, scenario, sf_dur, tc_dur) %>%
   left_join(p9_baseline, by = c("x", "y", "date")) %>%
+  filter(!is.na(bl_tc)) %>%               # drop rows with no valid baseline match
   mutate(sf_chg = sf_dur - bl_sf,
          tc_chg = tc_dur - bl_tc)
+
+## How many rows were removed as failed simulations?
+n_raw <- simulated0 %>% filter(scenario != "baseline", co2 == 350) %>% nrow()
+n_kept <- nrow(p9_data)
+cat(sprintf("[p9] Filtered %d failed rows (MaturityDAS < %d); kept %d of %d (%.1f%%)\n",
+            n_raw - n_kept, MIN_MATURITY_DAS, n_kept, n_raw,
+            n_kept / n_raw * 100))
 
 make_pheno_map <- function(data, var, breaks, labels, colors, legend_title) {
   df <- data %>%

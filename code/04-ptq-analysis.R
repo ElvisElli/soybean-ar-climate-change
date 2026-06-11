@@ -124,7 +124,24 @@ ptq_list <- foreach(
 
 stopCluster(cl)
 
-ptq_df <- dplyr::bind_rows(Filter(Negate(is.null), ptq_list))
+## Keep only successful data-frame results (drop NULLs and any error
+## conditions returned by .errorhandling = "pass").
+ptq_ok  <- Filter(is.data.frame, ptq_list)
+ptq_err <- Filter(function(x) inherits(x, "condition"), ptq_list)
+if (length(ptq_err))
+  cat(sprintf("[PTQ] WARNING: %d cell(s) errored: %s\n",
+              length(ptq_err), conditionMessage(ptq_err[[1]])))
+
+ptq_df <- dplyr::bind_rows(ptq_ok)
+
+## Fail loudly if the result is empty or malformed, rather than letting a
+## downstream filter() silently pick up a stray global variable.
+.need <- c("x", "y", "scenario", "co2", "year", "ptq", "Yield_kgha")
+if (nrow(ptq_df) == 0L || !all(.need %in% names(ptq_df)))
+  stop("[PTQ] ptq_df is empty or missing expected columns (",
+       paste(setdiff(.need, names(ptq_df)), collapse = ", "),
+       "). Check that .met files exist in '", WEATHER_DIR, "'.")
+
 cat(sprintf("[PTQ] Done. %d rows, %.1f%% with valid PTQ.\n",
             nrow(ptq_df), mean(!is.na(ptq_df$ptq)) * 100))
 

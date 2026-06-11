@@ -25,8 +25,11 @@ dir.create("figures", showWarnings = FALSE, recursive = TRUE)
 source("code/utils/plot-theme.R")
 
 ## Simulation results
-simulated0 <- readRDS("data/outputs/simulated-scenarios-df.rds") %>%
-  as_tibble() %>%
+simulated0 <- readRDS("data/outputs/simulated-scenarios-df.rds")
+## Drop columns with empty names (produced by cbind of APSIM output for
+## computed Report variables that lack an 'as' alias)
+simulated0 <- simulated0[, nzchar(names(simulated0)), drop = FALSE]
+simulated0 <- as_tibble(simulated0) %>%
   rename(any_of(c(date = "Date"))) %>%
   ## Compute PTQ if critical-period columns are present (requires re-run with updated template)
   ## PTQ = mean daily Radn / (mean daily T - Tbase); Tbase = 10°C (Zanon et al. 2016)

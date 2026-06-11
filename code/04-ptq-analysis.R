@@ -39,8 +39,9 @@ TBASE       <- 10                            # base temperature (°C), Zanon et 
 N_CORES     <- max(1L, parallel::detectCores() - 2L)
 
 ## ── Load simulation results ───────────────────────────────────────────────────
-sim <- readRDS("data/outputs/simulated-scenarios-df.rds") %>%
-  as_tibble() %>%
+sim <- readRDS("data/outputs/simulated-scenarios-df.rds")
+sim <- sim[, nzchar(names(sim)), drop = FALSE]
+sim <- as_tibble(sim) %>%
   rename(any_of(c(date = "Date")))
 
 ## Check StartPodDAS is present

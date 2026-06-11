@@ -265,18 +265,10 @@ ggsave("figures/p3 - climate change with adaptation - summary.tiff", plot = plot
 ## Mean yield change (%) vs baseline, averaged across 40 years per cell
 ## Faceted by scenario × CO2
 
-p4_baseline <- simulated0 %>%
-  filter(scenario == "baseline") %>%
-  select(x, y, date, baseline = Yield_kgha)
-
-p4_data <- simulated0 %>%
-  filter(scenario != "baseline") %>%
-  select(x, y, scenario, co2, date, Yield_kgha) %>%
-  left_join(p4_baseline, by = c("x", "y", "date")) %>%
-  mutate(pct_change = (Yield_kgha - baseline) / baseline * 100,
-         scenario   = factor(scenario, levels = scenario_levels, labels = scenario_labels)) %>%
+p4_data <- p3_data %>%
+  mutate(scenario = factor(scenario, labels = scenario_labels)) %>%
   group_by(x, y, scenario, co2) %>%
-  summarise(Yield_kgha = round(mean(pct_change, na.rm = TRUE), 1), .groups = "drop") %>%
+  summarise(Yield_kgha = round(mean(Yield_kgha, na.rm = TRUE), 1), .groups = "drop") %>%
   mutate(
     yield_bin = cut(Yield_kgha,
       breaks = c(-15, 0, 15, 30, 45),
@@ -294,7 +286,6 @@ p4_data %>%
   print()
 
 df_p4 <- to_stars_grid(p4_data, dims = c("x", "y", "scenario", "co2"))
-
 plot4 <- ggplot() +
   geom_sf(data = ark, fill = "grey50", color = "black") +
   geom_stars(data = df_p4, aes(fill = yield_bin)) +
@@ -313,77 +304,12 @@ ggsave("figures/p4 - climate change with adaptation - map.tiff", plot = plot4,
        width = 15, height = 15, units = "cm", dpi = 600, compression = "lzw", bg = "white")
 
 
-## ── Figure 5: Adaptation strategies — merged (violin + map) ──────────── ----
-## Combined manuscript figure (replicates Figures 3 and 4 inline)
-
-p5_baseline <- simulated0 %>%
-  filter(scenario == "baseline") %>%
-  select(x, y, date, baseline = Yield_kgha)
-
-p5_long <- simulated0 %>%
-  filter(scenario != "baseline") %>%
-  select(x, y, scenario, co2, date, Yield_kgha) %>%
-  pivot_wider(names_from = scenario, values_from = Yield_kgha) %>%
-  left_join(p5_baseline, by = c("x", "y", "date")) %>%
-  mutate(across(all_of(scenario_levels), ~ (. - baseline) / baseline * 100)) %>%
-  select(-baseline) %>%
-  pivot_longer(cols = all_of(scenario_levels),
-               names_to = "scenario", values_to = "Yield_kgha") %>%
-  mutate(scenario = factor(scenario, levels = scenario_levels, labels = scenario_labels_long))
-
-plot5_violin <- ggplot(p5_long,
-    aes(x = factor(scenario), y = Yield_kgha,
-        fill = as.factor(co2), colour = as.factor(co2))) +
-  geom_abline(intercept = 0, slope = 0, linetype = "dashed") +
-  geom_half_violin(
-    aes(group = interaction(factor(scenario), as.factor(co2))),
-    side = "l", trim = FALSE, alpha = 0.4, colour = NA,
-    position = position_dodge(width = 0.6)) +
-  geom_half_boxplot(
-    aes(group = interaction(factor(scenario), as.factor(co2))),
-    side = "r", position = position_dodge(width = 0.6),
-    outlier.shape = NA, width = 0.5, color = "black", size = 0.5) +
-  temp +
-  scale_colour_manual(values = c("#4dac26", "#d01c8b"),
-                      label  = c("Without elevated CO2", "With elevated CO2")) +
-  scale_fill_manual(values   = c("#4dac26", "#d01c8b"),
-                    label    = c("Without elevated CO2", "With elevated CO2")) +
-  labs(x = element_blank(), y = "Yield change (%)") +
-  theme(legend.position = "top", axis.text.x = element_text(angle = 30, hjust = 1)) +
-  scale_y_continuous(breaks = seq(-20, 40, 10), limits = c(-20, 40))
-
-p5_map_data <- p5_long %>%
-  mutate(scenario = factor(scenario, levels = scenario_labels_long, labels = scenario_labels)) %>%
-  group_by(x, y, scenario, co2) %>%
-  summarise(Yield_kgha = round(mean(Yield_kgha, na.rm = TRUE), 1), .groups = "drop") %>%
-  mutate(
-    yield_bin = cut(Yield_kgha,
-      breaks = c(-15, 0, 15, 30, 45),
-      labels = c("-15 to 0", "0 to 15", "15 to 30", "30 to 45"),
-      include.lowest = TRUE),
-    co2 = factor(as.character(co2),
-      levels = c("350", "540"),
-      labels = c("Without elevated CO2", "With elevated CO2"))
-  )
-
-df_p5_map <- to_stars_grid(p5_map_data, dims = c("x", "y", "scenario", "co2"))
-plot5_map <- ggplot() +
-  geom_sf(data = ark, fill = "grey50", color = "black") +
-  geom_stars(data = df_p5_map, aes(fill = yield_bin)) +
-  geom_sf(data = usa_counties, fill = NA, colour = "black", linewidth = 0.5) +
-  coord_sf(xlim = c(360000, 570000)) +
-  facet_grid(co2 ~ scenario) +
-  temp +
-  scale_fill_manual(
-    values = c("-15 to 0" = "#b10026", "0 to 15" = "#e5f5f9",
-               "15 to 30" = "#99d8c9", "30 to 45" = "#2ca25f"),
-    na.value = "grey50", na.translate = FALSE,
-    name = "Yield change (%)") +
-  map_theme
+## ── Figure 5: Adaptation strategies — merged (Fig 3 + Fig 4) ─────────── ----
+## Combined manuscript figure
 
 plot5_merged <- plot_grid(
-  plot5_violin + theme(plot.margin = margin(5, 5, 5, 5)),
-  plot5_map    + theme(plot.margin = margin(5, 5, 5, 5)),
+  plot3 + theme(plot.margin = margin(5, 5, 5, 5)),
+  plot4  + theme(plot.margin = margin(5, 5, 5, 5)),
   ncol = 2, align = "v", axis = "tb",
   labels = "AUTO", rel_widths = c(0.8, 1)
 )
@@ -576,7 +502,7 @@ plot9a <- make_pheno_map(p9_data, "tc_chg",
   labels = c("-8 to 0", "0 to 8", "8 to 15", "15 to 22", "> 22"),
   colors = c("-8 to 0"  = "#b10026", "0 to 8"  = "#e5f5f9",
              "8 to 15"  = "#99d8c9", "15 to 22" = "#41ae76", "> 22" = "#005824"),
-  legend_title = "(A)  Total crop cycle change (days)")
+  legend_title = "A  Total crop cycle change (days)")
 
 ## Panel B — seed-filling period change
 plot9b <- make_pheno_map(p9_data, "sf_chg",
@@ -584,7 +510,7 @@ plot9b <- make_pheno_map(p9_data, "sf_chg",
   labels = c("-5 to 0", "0 to 5", "5 to 10", "10 to 15", "> 15"),
   colors = c("-5 to 0"  = "#b10026", "0 to 5"  = "#e5f5f9",
              "5 to 10"  = "#99d8c9", "10 to 15" = "#41ae76", "> 15" = "#005824"),
-  legend_title = "(B)  Seed-filling period change (days)")
+  legend_title = "B  Seed-filling period change (days)")
 
 plot9 <- plot_grid(plot9a, plot9b, ncol = 1, align = "v", axis = "lr")
 

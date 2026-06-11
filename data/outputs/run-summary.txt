@@ -1,9 +1,9 @@
 ================================================================
-SIMULATION SUMMARY — 2026-06-09 19:18
+SIMULATION SUMMARY — 2026-06-10 12:17
 ================================================================
 Machine    : CSES-FJMJWM3 (windows)
 Workers    : 38 | Chunk size: 50
-Total time : 455.5 minutes
+Total time : 1.2 minutes
 
 ── Yield by scenario ────────────────────────────────────────
 # A tibble: 9 × 8

@@ -116,12 +116,30 @@ if (RUN_SIM_REPORT) {
   )
 }
 
+## ── Phase 5: PTQ analysis (requires StartPodDAS in simulation output) ────
+RUN_PTQ <- file.exists("data/outputs/simulated-scenarios-df.rds") &&
+           ("StartPodDAS" %in% names(readRDS("data/outputs/simulated-scenarios-df.rds")))
+if (RUN_PTQ) {
+  run_phase(
+    phase        = "5",
+    title        = "Photothermal Quotient analysis",
+    output_check = c("data/outputs/ptq-results.rds",
+                     "figures/fig11 - ptq map.tiff"),
+    script       = "code/04-ptq-analysis.R"
+  )
+} else {
+  cat(sprintf("[%s] Phase 5 SKIPPED — StartPodDAS not in simulation output yet.\n",
+              .ts()))
+  cat("         Re-run simulation with updated template to enable PTQ analysis.\n\n")
+}
+
 ## ── Summary ───────────────────────────────────────────────────────────────
 cat(paste(rep("═", 72), collapse = ""), "\n")
 cat(sprintf("[%s] All phases complete.\n", .ts()))
 cat(sprintf("  Manuscript figures   : figures/\n"))
 cat(sprintf("  Inspection report    : reports/inspection-report.pdf\n"))
 cat(sprintf("  Simulation report    : reports/simulation-report.pdf\n"))
+cat(sprintf("  PTQ results          : data/outputs/ptq-results.rds\n"))
 cat(sprintf("  Simulation results   : data/outputs/simulated-scenarios-df.rds\n"))
 cat(paste(rep("═", 72), collapse = ""), "\n\n")
 

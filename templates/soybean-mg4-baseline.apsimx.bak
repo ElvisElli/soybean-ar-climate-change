@@ -9352,7 +9352,7 @@
           "LineThickness": 0,
           "TableName": "Report",
           "XFieldName": "Clock.Today",
-          "YFieldName": "StartPodDAS",
+          "YFieldName": "sWUE",
           "X2FieldName": null,
           "Y2FieldName": null,
           "ShowInLegend": false,

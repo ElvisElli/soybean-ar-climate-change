@@ -71,8 +71,9 @@ cl <- makeCluster(N_CORES)
 registerDoParallel(cl)
 
 ptq_list <- foreach(
-  cid        = cells,
-  .packages  = c("apsimx", "dplyr"),
+  cid            = cells,
+  .packages      = c("apsimx", "dplyr"),
+  .export        = c("sim", "TBASE", "WEATHER_DIR"),
   .errorhandling = "pass"
 ) %dopar% {
 

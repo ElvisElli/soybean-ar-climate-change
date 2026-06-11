@@ -12,7 +12,8 @@
 ## Outputs:
 ##   data/outputs/ptq-results.rds        — PTQ per cell × year × scenario
 ##   figures/fig11 - ptq map.tiff        — spatial PTQ map across scenarios
-##   figures/fig12 - ptq yield.tiff      — PTQ vs yield scatter by scenario
+##   figures/fig12 - ptq change map.tiff — PTQ change vs baseline map
+##   figures/fig13 - ptq yield relationship.tiff — PTQ vs yield scatter
 ## ============================================================
 
 suppressPackageStartupMessages({
@@ -47,12 +48,7 @@ if (!"StartPodDAS" %in% names(sim))
   stop("StartPodDAS not found in simulated-scenarios-df.rds.\n",
        "Re-run the simulation with the updated template first.")
 
-## Sowing day-of-year per scenario (from scenario definitions)
-## early_sowing variants sow May-3; all others sow May-15
-sowing_doy <- ifelse(grepl("early_sowing", sim$scenario),
-                     as.integer(format(as.Date("2000-05-03"), "%j")),
-                     as.integer(format(as.Date("2000-05-15"), "%j")))
-
+## Sowing day-of-year per scenario: May-3 = DOY 123, May-15 = DOY 135
 sim <- sim %>%
   mutate(
     year        = lubridate::year(date),

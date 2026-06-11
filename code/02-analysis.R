@@ -543,6 +543,57 @@ make_pheno_map <- function(data, var, breaks, labels, colors, legend_title) {
     map_theme
 }
 
+## ── Stats for manuscript paragraph ──────────────────────────────────────────
+## "The total crop cycle decreased on average by xx days, with values ranging
+##  from xx to xx across locations (Figure 2). The shortening of the crop cycle
+##  was observed in xx of the 4,651 fields. Seed-filling period decreased in
+##  northern environments..."
+
+p9_cc <- p9_data %>%
+  filter(scenario == "climate_change") %>%
+  group_by(x, y) %>%
+  summarise(
+    tc_chg_mean = mean(tc_chg, na.rm = TRUE),
+    sf_chg_mean = mean(sf_chg, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+cat("\n── Figure 9 manuscript stats ──────────────────────────────\n")
+cat(sprintf("Total crop cycle change  : mean = %.1f days\n",
+            mean(p9_cc$tc_chg_mean, na.rm = TRUE)))
+cat(sprintf("  Range across locations : %.1f to %.1f days\n",
+            min(p9_cc$tc_chg_mean, na.rm = TRUE),
+            max(p9_cc$tc_chg_mean, na.rm = TRUE)))
+cat(sprintf("  Fields with shorter cycle (<0 days): %d of 4,651 (%.1f%%)\n",
+            sum(p9_cc$tc_chg_mean < 0, na.rm = TRUE),
+            mean(p9_cc$tc_chg_mean < 0, na.rm = TRUE) * 100))
+
+cat(sprintf("Seed-filling period change: mean = %.1f days\n",
+            mean(p9_cc$sf_chg_mean, na.rm = TRUE)))
+cat(sprintf("  Range across locations : %.1f to %.1f days\n",
+            min(p9_cc$sf_chg_mean, na.rm = TRUE),
+            max(p9_cc$sf_chg_mean, na.rm = TRUE)))
+cat(sprintf("  Fields with shorter seed-fill (<0 days): %d of 4,651 (%.1f%%)\n",
+            sum(p9_cc$sf_chg_mean < 0, na.rm = TRUE),
+            mean(p9_cc$sf_chg_mean < 0, na.rm = TRUE) * 100))
+
+## Seed-fill change by latitude tercile (north / central / south)
+lat_breaks <- quantile(p9_cc$y, probs = c(0, 1/3, 2/3, 1), na.rm = TRUE)
+p9_cc <- p9_cc %>%
+  mutate(lat_zone = cut(y, breaks = lat_breaks, include.lowest = TRUE,
+                        labels = c("South", "Central", "North")))
+cat("\nSeed-filling change by latitude zone:\n")
+p9_cc %>%
+  group_by(lat_zone) %>%
+  summarise(
+    n          = n(),
+    mean_sf_chg = round(mean(sf_chg_mean, na.rm = TRUE), 1),
+    pct_negative = round(mean(sf_chg_mean < 0, na.rm = TRUE) * 100, 1),
+    .groups = "drop"
+  ) %>%
+  print()
+cat("───────────────────────────────────────────────────────────\n\n")
+
 ## Panel A — total cycle change: one negative bin "-8 to 0" mirrors the first
 ## positive bin "0 to 8" for visual consistency
 plot9a <- make_pheno_map(p9_data, "tc_chg",

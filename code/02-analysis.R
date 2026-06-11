@@ -26,9 +26,11 @@ source("code/utils/plot-theme.R")
 
 ## Simulation results
 simulated0 <- readRDS("data/outputs/simulated-scenarios-df.rds")
-## Drop columns with empty names (produced by cbind of APSIM output for
-## computed Report variables that lack an 'as' alias)
-simulated0 <- simulated0[, nzchar(names(simulated0)), drop = FALSE]
+## Coerce to plain data.frame (handles data.table or list subclasses from saveRDS)
+simulated0 <- as.data.frame(simulated0)
+## Drop columns with empty or NA names (from APSIM cbind of computed variables)
+.ok <- nzchar(names(simulated0)) & !is.na(names(simulated0))
+if (!all(.ok)) simulated0 <- simulated0[, .ok, drop = FALSE]
 simulated0 <- as_tibble(simulated0) %>%
   rename(any_of(c(date = "Date"))) %>%
   ## Compute PTQ if critical-period columns are present (requires re-run with updated template)

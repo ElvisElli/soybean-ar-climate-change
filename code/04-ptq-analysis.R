@@ -40,7 +40,9 @@ N_CORES     <- max(1L, parallel::detectCores() - 2L)
 
 ## ── Load simulation results ───────────────────────────────────────────────────
 sim <- readRDS("data/outputs/simulated-scenarios-df.rds")
-sim <- sim[, nzchar(names(sim)), drop = FALSE]
+sim <- as.data.frame(sim)
+.ok <- nzchar(names(sim)) & !is.na(names(sim))
+if (!all(.ok)) sim <- sim[, .ok, drop = FALSE]
 sim <- as_tibble(sim) %>%
   rename(any_of(c(date = "Date")))
 

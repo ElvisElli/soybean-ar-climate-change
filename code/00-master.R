@@ -91,7 +91,9 @@ if (RUN_ANALYSIS) {
     phase        = "2",
     title        = "Data analysis & manuscript figures",
     output_check = c("figures/fig01 - climate change without adaptation.tiff",
-                     "figures/fig06 - environmental characterization.tiff"),
+                     "figures/fig05 - adaptation strategies merged.tiff",
+                     "figures/fig09 - phenology change maps.tiff",
+                     "figures/fig10 - water use efficiency - sWUE.tiff"),
     script       = "code/02-analysis.R"
   )
 }
@@ -117,8 +119,11 @@ if (RUN_SIM_REPORT) {
 }
 
 ## ── Phase 5: PTQ analysis (requires StartPodDAS in simulation output) ────
-RUN_PTQ <- file.exists("data/outputs/simulated-scenarios-df.rds") &&
-           ("StartPodDAS" %in% names(readRDS("data/outputs/simulated-scenarios-df.rds")))
+## Check column names via RDS header only (avoids reading full 30 MB file)
+.sim_rds <- "data/outputs/simulated-scenarios-df.rds"
+RUN_PTQ  <- file.exists(.sim_rds) &&
+            tryCatch("StartPodDAS" %in% names(readRDS(.sim_rds)),
+                     error = function(e) FALSE)
 if (RUN_PTQ) {
   run_phase(
     phase        = "5",

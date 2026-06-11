@@ -274,6 +274,7 @@ extract_sim_columns <- function(sim, sc_row, grid_row) {
   )
   keep <- c("Date",
             "EmergenceDAS", "FloweringDAS", "SeedFillingDAS", "MaturityDAS",
+            "StartPodDAS",
             "CumRadiationInterceptionOnGreen",
             "Yield_kgha", "biomass_kgha",
             "SeasonRain", "SeasonRadn",

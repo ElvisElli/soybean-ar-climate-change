@@ -274,16 +274,18 @@ for (i in seq_along(cells)) {
         cum_radn       = NA_real_,
         temp_term      = NA_real_)
     } else {
-      mean_radn  <- mean(win$radn,  na.rm = TRUE)
-      mean_tmean <- mean(win$tmean, na.rm = TRUE)
+      sum_radn   <- sum(win$radn,             na.rm = TRUE)
+      sum_tterm  <- sum(win$tmean - TBASE,   na.rm = TRUE)
+      mean_radn  <- mean(win$radn,            na.rm = TRUE)
+      mean_tmean <- mean(win$tmean,           na.rm = TRUE)
       result[[k]] <- dplyr::mutate(r,
-        ptq            = mean_radn / (mean_tmean - TBASE),  # = sum(Radn)/sum(Tmean-Tbase)
+        ptq            = sum_radn / sum_tterm,   # exact: sum(Radn) / sum(Tmean - Tbase)
         critical_radn  = mean_radn,
         critical_tmean = mean_tmean,
         window_days    = as.integer(nrow(win)),
-        window_gdd     = sum(pmax(win$tmean - TBASE, 0), na.rm = TRUE),
-        cum_radn       = sum(win$radn, na.rm = TRUE),
-        temp_term      = mean_tmean - TBASE)
+        window_gdd     = sum_tterm,              # GDD = sum(Tmean - Tbase) — same quantity
+        cum_radn       = sum_radn,
+        temp_term      = sum_tterm)
     }
   }
   ptq_list[[i]] <- dplyr::bind_rows(result)
@@ -549,7 +551,7 @@ p16_data <- ptq_df %>%
                            labels = scenario_labels))
 
 plot16 <- make_map(p16_data, "cum_radn_mean",
-                   "Mean cumulative radiation (MJ m⁻²)", palette = "plasma", direction = -1)
+                   "Sum of radiation over critical period (MJ m⁻²)", palette = "plasma", direction = -1)
 
 ggsave("figures/fig16 - cumulative radiation.tiff", plot = plot16,
        width = 30, height = 10, units = "cm", dpi = 600,
@@ -568,7 +570,7 @@ p17_data <- ptq_df %>%
                            labels = scenario_labels))
 
 plot17 <- make_map(p17_data, "temp_term_mean",
-                   "Mean temperature term (Tmean − Tbase, °C)", palette = "rocket", direction = -1)
+                   "Sum of (Tmean − Tbase) over critical period (°C·day)", palette = "rocket", direction = -1)
 
 ggsave("figures/fig17 - temperature term.tiff", plot = plot17,
        width = 30, height = 10, units = "cm", dpi = 600,

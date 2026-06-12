@@ -102,10 +102,15 @@ detect_weather_dir <- function() {
 }
 
 WEATHER_DIR <- detect_weather_dir()
-n_met <- length(list.files(WEATHER_DIR, "\\.met$"))
-message(sprintf("[PTQ] Found %d .met files in weather directory.", n_met))
+met_files   <- list.files(WEATHER_DIR, "\\.met$")
+n_met       <- length(met_files)
+message(sprintf("[PTQ] Found %d .met files in: %s", n_met, WEATHER_DIR))
 if (n_met == 0)
   stop("[PTQ] No .met files found in: ", WEATHER_DIR)
+
+## Show a few example filenames so we can confirm the naming convention
+message("[PTQ] Example .met filenames: ",
+        paste(head(met_files, 5), collapse = ", "))
 
 ## ── Load simulation results ───────────────────────────────────────────────────
 message("[PTQ] Loading simulation results...")
@@ -121,6 +126,23 @@ message(sprintf("[PTQ] Simulation data: %d rows × %d scenarios × %d cells",
                 nrow(sim),
                 length(unique(sim$scenario)),
                 length(unique(sim$cellid))))
+
+## Cross-check: do cellid values match .met filenames?
+## .met files are expected to be named <cellid>.met (e.g. "12345.met").
+## If the names don't match, every cell will silently return NULL.
+met_ids_on_disk <- as.integer(sub("\\.met$", "", met_files))
+sim_cellids     <- unique(sim$cellid)
+n_match         <- sum(sim_cellids %in% met_ids_on_disk)
+message(sprintf("[PTQ] cellid→.met match check: %d of %d simulation cells have a matching .met file",
+                n_match, length(sim_cellids)))
+if (n_match == 0)
+  stop("[PTQ] No simulation cellids match any .met filename.\n",
+       "  First 5 cellids in sim : ", paste(head(sim_cellids, 5), collapse = ", "), "\n",
+       "  First 5 .met filenames : ", paste(head(met_files, 5), collapse = ", "), "\n",
+       "  The .met files must be named <cellid>.met  (e.g. '12345.met').")
+if (n_match < length(sim_cellids))
+  message(sprintf("[PTQ] WARNING: %d cells have no .met file — they will be skipped.",
+                  length(sim_cellids) - n_match))
 
 ## Check required columns
 required_cols <- c("StartPodDAS", "MaturityDAS", "Yield_kgha",

@@ -193,30 +193,40 @@ if (n_bad_window > 0)
 ##
 cells <- unique(sim$cellid)
 
-## Pre-flight: verify at least one cell's .met file is reachable with the
-## absolute path before launching the parallel cluster.
-## This catches path problems (wrong directory, symlinks, network drives)
-## without waiting 7 minutes for 4,651 workers to silently return NULL.
+## Pre-split sim by cellid in the main process.
+##
+## WHY: exporting the full 1.6M-row sim to 78 PSOCK workers on Windows
+## causes silent serialisation failures — workers receive a broken/empty
+## object, dplyr::filter(sim, cellid==cid) returns 0 rows, and every
+## worker exits via return(NULL).  Fix: split into per-cell slices here,
+## pass each slice directly through the foreach iterator.  Workers never
+## touch the full data frame — only their ~360-row slice.
+needed_cols <- c("cellid", "x", "y", "scenario", "co2", "year",
+                 "pod_doy", "mat_doy", "Yield_kgha", "StartPodDAS", "MaturityDAS")
+sim_split <- split(as.data.frame(sim[, needed_cols]), sim$cellid)
+
+## Pre-flight: verify at least one .met file is reachable via the absolute path.
 test_path <- file.path(WEATHER_DIR, paste0(cells[1], ".met"))
 if (!file.exists(test_path))
   stop("[PTQ] Pre-flight check failed — cannot find .met file for cell ", cells[1], "\n",
        "  Expected path: ", test_path, "\n",
        "  WEATHER_DIR contains: ", paste(head(met_files, 3), collapse = ", "), " ...\n",
        "  Simulation cellids start with: ", paste(head(cells, 3), collapse = ", "), "\n",
-       "  Check that LOCAL_DATA_CACHE points to the folder that contains the weather/ subfolder.")
+       "  Check that LOCAL_DATA_CACHE points to the folder containing the weather/ subfolder.")
 message(sprintf("[PTQ] Pre-flight OK — %s exists.", basename(test_path)))
 
 message(sprintf("[PTQ] Computing PTQ for %d cells using %d cores...", length(cells), N_CORES))
-message(sprintf("[PTQ] Tbase = %d°C | critical window: EarlyPodDevelopment → Maturing", TBASE))
-message("[PTQ] (This takes several minutes on the full grid — progress shown below)")
+message(sprintf("[PTQ] Tbase = %d°C | critical window: EarlyPodDevelopment -> Maturing", TBASE))
+message("[PTQ] (This takes several minutes on the full grid)")
 
 cl <- makeCluster(N_CORES)
 registerDoParallel(cl)
 
 ptq_list <- foreach(
-  cid            = cells,
-  .packages      = c("apsimx", "dplyr"),
-  .export        = c("sim", "TBASE", "WEATHER_DIR"),
+  cid       = cells,
+  cell_rows = sim_split[as.character(cells)],  # per-cell slice, not full sim
+  .packages = c("apsimx", "dplyr"),
+  .export   = c("TBASE", "WEATHER_DIR"),       # sim no longer exported
   .errorhandling = "pass"
 ) %dopar% {
 
@@ -232,12 +242,7 @@ ptq_list <- foreach(
   ## Daily weather for this cell (all years)
   met_df <- as.data.frame(met) %>%
     dplyr::select(year, day, radn, maxt, mint) %>%
-    dplyr::mutate(tmean = (maxt + mint) / 2)   # daily mean temperature
-
-  ## All rows for this cell (all years × scenarios)
-  cell_rows <- dplyr::filter(sim, cellid == cid) %>%
-    dplyr::select(cellid, x, y, scenario, co2, year,
-                  pod_doy, mat_doy, Yield_kgha, StartPodDAS, MaturityDAS)
+    dplyr::mutate(tmean = (maxt + mint) / 2)
 
   result <- vector("list", nrow(cell_rows))
   for (k in seq_len(nrow(cell_rows))) {

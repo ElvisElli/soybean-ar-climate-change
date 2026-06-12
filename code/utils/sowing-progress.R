@@ -161,33 +161,35 @@ doy_labels <- c("100\n(Apr 10)", "110\n(Apr 20)", "120\n(Apr 30)",
                 "160\n(Jun 9)",  "170\n(Jun 19)")
 
 ## ── Figure 1: all years + average, 10% and 50% annotated ────────────────────
+## Text sits above its dashed line (10%: lower-left area; 50%: mid-right area)
 plot_all <- ggplot() +
   geom_line(data = pred_curves,
             aes(x = DOY, y = progress, group = year),
             colour = "grey70", linewidth = 0.55, alpha = 0.7) +
   geom_hline(yintercept = c(10, 50), linetype = "dashed",
-             colour = "grey30", linewidth = 0.45) +
+             colour = "grey40", linewidth = 0.45) +
   geom_line(data = avg_curve, aes(x = DOY, y = progress),
             colour = AVG_COL, linewidth = 1.5) +
-  annotate("text", x = avg_doy_10 - 1, y = 17,
-           label = sprintf("10%% avg\nDOY %.0f (~%s)", avg_doy_10,
+  ## 10% label — placed right of the curve crossing, above the dashed line
+  annotate("text", x = avg_doy_10 + 2, y = 15,
+           label = sprintf("10%% avg: DOY %.0f (%s)", avg_doy_10,
                            format(as.Date(paste0("2023-", round(avg_doy_10)), "%Y-%j"), "%b %d")),
-           hjust = 1, size = 3.0, colour = "grey20", lineheight = 0.9) +
-  annotate("text", x = avg_doy_50 - 1, y = 57,
-           label = sprintf("50%% avg\nDOY %.0f (~%s)", avg_doy_50,
+           hjust = 0, size = 3.0, colour = "black", lineheight = 0.9) +
+  ## 50% label — placed right of the curve crossing, above the dashed line
+  annotate("text", x = avg_doy_50 + 2, y = 55,
+           label = sprintf("50%% avg: DOY %.0f (%s)", avg_doy_50,
                            format(as.Date(paste0("2023-", round(avg_doy_50)), "%Y-%j"), "%b %d")),
-           hjust = 1, size = 3.0, colour = AVG_COL, lineheight = 0.9) +
+           hjust = 0, size = 3.0, colour = "black", lineheight = 0.9) +
   temp +
-  scale_x_continuous(name = "Day of year", breaks = doy_breaks, labels = doy_labels) +
+  theme(panel.background = element_rect(fill = "white"),
+        panel.grid.major = element_line(colour = "grey90")) +
+  scale_x_continuous(name = "Day of year", breaks = doy_breaks, labels = doy_labels,
+                     expand = expansion(mult = c(0.02, 0.05))) +
   scale_y_continuous(name = "Soybean planting progress (%)",
-                     limits = c(0, 100), breaks = seq(0, 100, 20)) +
-  labs(caption = sprintf(
-    "Arkansas soybeans, USDA-NASS %d–%d (n = %d years). Grey lines = individual years; green = average.",
-    min(params_df$year), max(params_df$year), nrow(params_df))) +
-  theme(plot.caption = element_text(size = 7.5, colour = "grey40"))
+                     limits = c(0, 100), breaks = seq(0, 100, 20))
 
 ggsave("figures/fig_progress_all.tiff", plot = plot_all,
-       width = 17, height = 13, units = "cm",
+       width = 16, height = 11, units = "cm",
        dpi = 600, compression = "lzw", bg = "white")
 cat("[Progress] Saved: figures/fig_progress_all.tiff\n")
 
@@ -205,15 +207,18 @@ avg5_doy_50 <- doy_at_pct(avg5_b, avg5_c, 50)
 avg5_curve  <- data.frame(DOY      = DOY_seq,
                           progress = 100 / (1 + exp(-avg5_b * (DOY_seq - avg5_c))))
 
-## Arrow annotation positions — text placed well inside plot, arrow points to curve
-arr_10_x  <- avg5_doy_10 + 8    # text to the right of the 10% marker
-arr_50_x  <- avg5_doy_50 - 8    # text to the left of the 50% marker
+## Arrow annotation: 10% text above-right of crossing; 50% text above-right of crossing
+## Both arrows point downward onto the average curve — positioned to avoid line overlap
+arr_10_text_x <- avg5_doy_10 + 10
+arr_10_text_y <- 25
+arr_50_text_x <- avg5_doy_50 + 5
+arr_50_text_y <- 63
 
 plot_recent <- ggplot() +
   ## Background years (light grey)
   geom_line(data = pred_bg,
             aes(x = DOY, y = progress, group = year),
-            colour = "grey82", linewidth = 0.3, alpha = 0.6) +
+            colour = "grey75", linewidth = 0.3, alpha = 0.6) +
   ## Recent year curves — all same colour, thin
   geom_line(data = pred_recent,
             aes(x = DOY, y = progress, group = year),
@@ -223,41 +228,41 @@ plot_recent <- ggplot() +
             colour = RECENT_COL, linewidth = 2.0) +
   ## Dashed threshold lines
   geom_hline(yintercept = c(10, 50), linetype = "dashed",
-             colour = "grey35", linewidth = 0.4) +
-  ## Arrows: text → point on avg5 curve
+             colour = "grey40", linewidth = 0.4) +
+  ## Arrow: 10% label → curve
   annotate("segment",
-           x    = arr_10_x - 0.5, y    = 18,
-           xend = avg5_doy_10,    yend = 10.5,
-           arrow = arrow(length = unit(0.12, "cm"), type = "closed"),
-           colour = RECENT_COL, linewidth = 0.5) +
+           x = arr_10_text_x, y = arr_10_text_y - 3,
+           xend = avg5_doy_10 + 1, yend = 11,
+           arrow = arrow(length = unit(0.13, "cm"), type = "closed"),
+           colour = "black", linewidth = 0.45) +
+  ## Arrow: 50% label → curve
   annotate("segment",
-           x    = arr_50_x + 0.5, y    = 43,
-           xend = avg5_doy_50,    yend = 50,
-           arrow = arrow(length = unit(0.12, "cm"), type = "closed"),
-           colour = RECENT_COL, linewidth = 0.5) +
-  ## Labels inside plot
+           x = arr_50_text_x, y = arr_50_text_y - 3,
+           xend = avg5_doy_50 + 1, yend = 51,
+           arrow = arrow(length = unit(0.13, "cm"), type = "closed"),
+           colour = "black", linewidth = 0.45) +
+  ## Label: 10%
   annotate("text",
-           x = arr_10_x, y = 22,
-           label = sprintf("10%% planted\nDOY %.0f (~%s)", avg5_doy_10,
+           x = arr_10_text_x, y = arr_10_text_y,
+           label = sprintf("10%% planted\nDOY %.0f (%s)", avg5_doy_10,
                            format(as.Date(paste0("2023-", round(avg5_doy_10)), "%Y-%j"), "%b %d")),
-           hjust = 0, size = 2.9, colour = RECENT_COL, lineheight = 0.9) +
+           hjust = 0, size = 2.9, colour = "black", lineheight = 0.95) +
+  ## Label: 50%
   annotate("text",
-           x = arr_50_x, y = 38,
-           label = sprintf("50%% planted\nDOY %.0f (~%s)", avg5_doy_50,
+           x = arr_50_text_x, y = arr_50_text_y,
+           label = sprintf("50%% planted\nDOY %.0f (%s)", avg5_doy_50,
                            format(as.Date(paste0("2023-", round(avg5_doy_50)), "%Y-%j"), "%b %d")),
-           hjust = 1, size = 2.9, colour = RECENT_COL, lineheight = 0.9) +
+           hjust = 0, size = 2.9, colour = "black", lineheight = 0.95) +
   temp +
-  scale_x_continuous(name = "Day of year", breaks = doy_breaks, labels = doy_labels) +
+  theme(panel.background = element_rect(fill = "white"),
+        panel.grid.major = element_line(colour = "grey90")) +
+  scale_x_continuous(name = "Day of year", breaks = doy_breaks, labels = doy_labels,
+                     expand = expansion(mult = c(0.02, 0.05))) +
   scale_y_continuous(name = "Soybean planting progress (%)",
-                     limits = c(0, 100), breaks = seq(0, 100, 20)) +
-  labs(caption = sprintf(
-    "Arkansas soybeans, USDA-NASS. Bold orange = %d–%d average; thin orange = individual years; grey = %d–%d.",
-    min(recent_years), max(recent_years),
-    min(params_df$year), max(params_df$year))) +
-  theme(plot.caption = element_text(size = 7.5, colour = "grey40"))
+                     limits = c(0, 100), breaks = seq(0, 100, 20))
 
 ggsave("figures/fig_progress_recent.tiff", plot = plot_recent,
-       width = 17, height = 13, units = "cm",
+       width = 16, height = 11, units = "cm",
        dpi = 600, compression = "lzw", bg = "white")
 cat("[Progress] Saved: figures/fig_progress_recent.tiff\n")
 

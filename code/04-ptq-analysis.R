@@ -101,7 +101,10 @@ detect_weather_dir <- function() {
        "  Option C: place .met files in intermediate-data/weather/ relative to the repo root.")
 }
 
-WEATHER_DIR <- detect_weather_dir()
+## normalizePath converts to an absolute path with OS-native separators.
+## This is critical on Windows: parallel workers each have their own working
+## directory and cannot resolve relative paths from the main session.
+WEATHER_DIR <- normalizePath(detect_weather_dir(), mustWork = TRUE)
 met_files   <- list.files(WEATHER_DIR, "\\.met$")
 n_met       <- length(met_files)
 message(sprintf("[PTQ] Found %d .met files in: %s", n_met, WEATHER_DIR))
@@ -189,6 +192,20 @@ if (n_bad_window > 0)
 ##      (< 5 days likely signals a phenology/data error, not a real season.)
 ##
 cells <- unique(sim$cellid)
+
+## Pre-flight: verify at least one cell's .met file is reachable with the
+## absolute path before launching the parallel cluster.
+## This catches path problems (wrong directory, symlinks, network drives)
+## without waiting 7 minutes for 4,651 workers to silently return NULL.
+test_path <- file.path(WEATHER_DIR, paste0(cells[1], ".met"))
+if (!file.exists(test_path))
+  stop("[PTQ] Pre-flight check failed — cannot find .met file for cell ", cells[1], "\n",
+       "  Expected path: ", test_path, "\n",
+       "  WEATHER_DIR contains: ", paste(head(met_files, 3), collapse = ", "), " ...\n",
+       "  Simulation cellids start with: ", paste(head(cells, 3), collapse = ", "), "\n",
+       "  Check that LOCAL_DATA_CACHE points to the folder that contains the weather/ subfolder.")
+message(sprintf("[PTQ] Pre-flight OK — %s exists.", basename(test_path)))
+
 message(sprintf("[PTQ] Computing PTQ for %d cells using %d cores...", length(cells), N_CORES))
 message(sprintf("[PTQ] Tbase = %d°C | critical window: EarlyPodDevelopment → Maturing", TBASE))
 message("[PTQ] (This takes several minutes on the full grid — progress shown below)")

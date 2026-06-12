@@ -7,14 +7,12 @@
 ## effect of solar radiation and temperature on seed yield:
 ##
 ##   PTQ = sum of daily radiation (MJ/m²)
-##         ─────────────────────────────────────────────
-##         sum of mean daily temperature (°C)
+##         ──────────────────────────────────────────────────────
+##         sum of (mean daily temperature − Tbase)  (°C·day)
 ##
-##       = mean daily Radn / mean daily Tmean   (mathematically equivalent)
+##       = mean(Radn) / (mean(Tmean) − Tbase)   [mathematically equivalent]
 ##
-## No base temperature is subtracted from the denominator — Tmean is used
-## directly (following the formulation in the reference paper).
-## A higher PTQ means more radiation relative to thermal time, which is
+## A higher PTQ means more radiation per unit of thermal time, which is
 ## favourable for seed filling (more photosynthate per unit heat load).
 ##
 ## CRITICAL WINDOW (following Zanon et al. 2016):
@@ -53,10 +51,7 @@ dir.create("data/outputs", showWarnings = FALSE, recursive = TRUE)
 ## Set to NULL to auto-detect Box Drive (Windows) or intermediate-data/ (Linux).
 LOCAL_DATA_CACHE <- "C:/temp/soybean-data"   # set to NULL if not using a cache
 
-TBASE    <- 10    # base temperature (°C) — used only for GDD calculation, NOT for PTQ denominator
-## NOTE: PTQ denominator uses raw mean temperature (no Tbase subtraction), following
-## the formulation: PTQ = sum(Radn) / sum(Tmean)  [equivalent to mean(Radn)/mean(Tmean)]
-## Tbase is retained only for the GDD companion metric (window_gdd).
+TBASE    <- 10    # base temperature (°C) — Tbase for soybean (common value in literature)
 N_CORES  <- max(1L, parallel::detectCores() - 2L)
 
 ## ── Auto-detect weather directory (mirrors 01-simulation.R) ──────────────────
@@ -242,7 +237,7 @@ message(sprintf("[PTQ] Pre-flight OK — %s exists.", basename(test_path)))
 ## the function either hangs or fails silently in child R processes.
 ## Sequential processing is fast enough (~8 min for 4,651 cells) and always works.
 message(sprintf("[PTQ] Computing PTQ for %d cells (sequential)...", length(cells)))
-message(sprintf("[PTQ] Formula: mean(Radn)/mean(Tmean) | Tbase = %d°C (GDD only) | window: EarlyPodDevelopment -> Maturing", TBASE))
+message(sprintf("[PTQ] Formula: sum(Radn)/sum(Tmean-Tbase) | Tbase = %d°C | window: EarlyPodDevelopment -> Maturing", TBASE))
 
 ptq_list <- vector("list", length(cells))
 report_every <- max(1L, as.integer(length(cells) / 20))  # progress every 5%
@@ -282,13 +277,13 @@ for (i in seq_along(cells)) {
       mean_radn  <- mean(win$radn,  na.rm = TRUE)
       mean_tmean <- mean(win$tmean, na.rm = TRUE)
       result[[k]] <- dplyr::mutate(r,
-        ptq            = mean_radn / mean_tmean,   # sum(Radn)/sum(Tmean) = mean(Radn)/mean(Tmean)
+        ptq            = mean_radn / (mean_tmean - TBASE),  # = sum(Radn)/sum(Tmean-Tbase)
         critical_radn  = mean_radn,
         critical_tmean = mean_tmean,
         window_days    = as.integer(nrow(win)),
         window_gdd     = sum(pmax(win$tmean - TBASE, 0), na.rm = TRUE),
         cum_radn       = sum(win$radn, na.rm = TRUE),
-        temp_term      = mean_tmean)
+        temp_term      = mean_tmean - TBASE)
     }
   }
   ptq_list[[i]] <- dplyr::bind_rows(result)
@@ -319,10 +314,10 @@ mean_win <- round(mean(ptq_df$window_days, na.rm = TRUE), 1)
 message(sprintf("[PTQ] Results: %d rows total | %d valid (%.1f%%) | mean window = %.1f days",
                 n_total, n_valid, pct_ok, mean_win))
 
-## Negative PTQ would mean negative mean temperature — impossible in Arkansas growing season
+## Negative PTQ would mean Tmean < Tbase during the critical window — biologically implausible
 n_neg <- sum(ptq_df$ptq < 0, na.rm = TRUE)
 if (n_neg > 0)
-  warning(sprintf("[PTQ] %d rows have negative PTQ (Tmean < 0°C) — check data.", n_neg))
+  warning(sprintf("[PTQ] %d rows have negative PTQ (Tmean < Tbase = %d°C) — check data.", n_neg, TBASE))
 
 ## Per-scenario PTQ summary (printed to console for quick sanity check)
 cat("\n── PTQ quick check (CO2 = 350, mean across all site-years) ─────────────\n")
@@ -399,7 +394,7 @@ plot11 <- ggplot() +
   temp +
   scale_fill_viridis_c(
     option = "plasma", direction = -1, na.value = "grey50",
-    name = "Mean PTQ (MJ m⁻² °C⁻¹)") +
+    name = "Mean PTQ (MJ m⁻² °C⁻¹ day⁻¹)") +
   map_theme
 
 ggsave("figures/fig11 - ptq map.tiff", plot = plot11,
@@ -450,7 +445,7 @@ plot12 <- ggplot() +
                "0.5 to 1.5"      = "#74c476",
                "> 1.5"           = "#005824"),
     na.value = "grey50", na.translate = FALSE,
-    name = "PTQ change vs Baseline\n(MJ m⁻² °C⁻¹)") +
+    name = "PTQ change vs Baseline\n(MJ m⁻² °C⁻¹ day⁻¹)") +
   map_theme
 
 ggsave("figures/fig12 - ptq change map.tiff", plot = plot12,
@@ -472,7 +467,7 @@ plot13 <- ggplot(p13_data, aes(x = ptq, y = Yield_kgha, colour = scenario)) +
   geom_point(size = 0.8, alpha = 0.15) +
   geom_smooth(method = "lm", se = FALSE, linewidth = 1) +
   temp +
-  labs(x = "Photothermal Quotient (MJ m⁻² °C⁻¹)",
+  labs(x = "Photothermal Quotient (MJ m⁻² °C⁻¹ day⁻¹)",
        y = "Seed yield (kg/ha)",
        colour = "Scenario") +
   scale_colour_manual(values = c("Baseline"      = "#1f78b4",
@@ -573,7 +568,7 @@ p17_data <- ptq_df %>%
                            labels = scenario_labels))
 
 plot17 <- make_map(p17_data, "temp_term_mean",
-                   "Mean temperature term (Tmean, °C)", palette = "rocket", direction = -1)
+                   "Mean temperature term (Tmean − Tbase, °C)", palette = "rocket", direction = -1)
 
 ggsave("figures/fig17 - temperature term.tiff", plot = plot17,
        width = 30, height = 10, units = "cm", dpi = 600,

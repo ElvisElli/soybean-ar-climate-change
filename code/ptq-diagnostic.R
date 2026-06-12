@@ -58,23 +58,48 @@ for (r in res2) {
                 r$cid, r$exists, r$nrows, r$wd))
 }
 
-## ── Test 3: if file exists in workers, try reading it ───────────────────────
-cat("\n=== TEST 3: read one .met file in a worker ===\n")
+## ── Test 3: capture read_apsim_met error message from inside a worker ────────
+cat("\n=== TEST 3: read_apsim_met in a worker (captures error message) ===\n")
 cl3 <- makeCluster(1L); registerDoParallel(cl3)
 res3 <- foreach(cid = cells[1], .packages = "apsimx",
                 .export = c("WEATHER_DIR"), .errorhandling = "pass") %dopar% {
-  mp  <- file.path(WEATHER_DIR, paste0(cid, ".met"))
-  if (!file.exists(mp)) return(list(ok = FALSE, msg = paste("not found:", mp)))
-  met <- tryCatch(read_apsim_met(mp, verbose = FALSE),
-                  error = function(e) list(err = e$message))
-  if (is.list(met) && !is.null(met$err))
-    return(list(ok = FALSE, msg = met$err))
-  list(ok = TRUE, nrow = nrow(as.data.frame(met)),
-       cols = names(as.data.frame(met)))
+  mp  <- normalizePath(file.path(WEATHER_DIR, paste0(cid, ".met")), mustWork = FALSE)
+  if (!file.exists(mp)) return(list(ok = FALSE, step = "file.exists", msg = mp))
+  read_err <- NULL
+  met <- tryCatch(
+    read_apsim_met(mp, verbose = FALSE),
+    error   = function(e) { read_err <<- e$message; NULL },
+    warning = function(w) { read_err <<- paste("WARNING:", w$message); NULL }
+  )
+  if (is.null(met))
+    return(list(ok = FALSE, step = "read_apsim_met", msg = read_err))
+  df_err <- NULL
+  met_df <- tryCatch(
+    as.data.frame(met),
+    error = function(e) { df_err <<- e$message; NULL }
+  )
+  if (is.null(met_df))
+    return(list(ok = FALSE, step = "as.data.frame", msg = df_err))
+  list(ok = TRUE, nrow = nrow(met_df), cols = names(met_df))
 }[[1]]
 stopCluster(cl3)
-cat(sprintf("  ok=%s | %s\n", res3$ok,
-            if (res3$ok) paste("rows:", res3$nrow, "| cols:", paste(res3$cols, collapse=","))
-            else res3$msg))
+if (is.null(res3)) {
+  cat("  Worker returned NULL with no error captured (foreach result empty)\n")
+} else if (isTRUE(res3$ok)) {
+  cat(sprintf("  OK — rows: %d | cols: %s\n", res3$nrow, paste(res3$cols, collapse = ", ")))
+} else {
+  cat(sprintf("  FAILED at step '%s': %s\n", res3$step, res3$msg))
+}
+
+## ── Test 4: read .met sequentially in main process ──────────────────────────
+cat("\n=== TEST 4: read_apsim_met in MAIN process (sanity check) ===\n")
+mp4 <- normalizePath(file.path(WEATHER_DIR, paste0(cells[1], ".met")), mustWork = FALSE)
+met4 <- tryCatch(read_apsim_met(mp4, verbose = FALSE), error = function(e) e)
+if (inherits(met4, "error")) {
+  cat("  FAILED:", met4$message, "\n")
+} else {
+  df4 <- as.data.frame(met4)
+  cat(sprintf("  OK — rows: %d | cols: %s\n", nrow(df4), paste(names(df4), collapse = ", ")))
+}
 
 cat("\nDiagnostic complete.\n")

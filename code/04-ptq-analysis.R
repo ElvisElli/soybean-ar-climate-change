@@ -38,8 +38,6 @@ suppressPackageStartupMessages({
   library(sf)
   library(stars)
   library(cowplot)
-  library(doParallel)
-  library(foreach)
 })
 
 source("code/utils/plot-theme.R")
@@ -193,19 +191,12 @@ if (n_bad_window > 0)
 ##
 cells <- unique(sim$cellid)
 
-## Pre-split sim by cellid in the main process.
-##
-## WHY: exporting the full 1.6M-row sim to 78 PSOCK workers on Windows
-## causes silent serialisation failures — workers receive a broken/empty
-## object, dplyr::filter(sim, cellid==cid) returns 0 rows, and every
-## worker exits via return(NULL).  Fix: split into per-cell slices here,
-## pass each slice directly through the foreach iterator.  Workers never
-## touch the full data frame — only their ~360-row slice.
+## Pre-split sim by cellid so each cell gets only its own rows.
 needed_cols <- c("cellid", "x", "y", "scenario", "co2", "year",
                  "pod_doy", "mat_doy", "Yield_kgha", "StartPodDAS", "MaturityDAS")
 sim_split <- split(as.data.frame(sim[, needed_cols]), sim$cellid)
 
-## Pre-flight: verify at least one .met file is reachable via the absolute path.
+## Pre-flight: verify at least one .met file is reachable.
 test_path <- file.path(WEATHER_DIR, paste0(cells[1], ".met"))
 if (!file.exists(test_path))
   stop("[PTQ] Pre-flight check failed — cannot find .met file for cell ", cells[1], "\n",
@@ -215,52 +206,50 @@ if (!file.exists(test_path))
        "  Check that LOCAL_DATA_CACHE points to the folder containing the weather/ subfolder.")
 message(sprintf("[PTQ] Pre-flight OK — %s exists.", basename(test_path)))
 
-message(sprintf("[PTQ] Computing PTQ for %d cells using %d cores...", length(cells), N_CORES))
+## ── Sequential processing ─────────────────────────────────────────────────────
+## Windows PSOCK parallel workers cannot reliably call read_apsim_met() —
+## the function either hangs or fails silently in child R processes.
+## Sequential processing is fast enough (~8 min for 4,651 cells) and always works.
+message(sprintf("[PTQ] Computing PTQ for %d cells (sequential)...", length(cells)))
 message(sprintf("[PTQ] Tbase = %d°C | critical window: EarlyPodDevelopment -> Maturing", TBASE))
-message("[PTQ] (This takes several minutes on the full grid)")
 
-cl <- makeCluster(N_CORES)
-registerDoParallel(cl)
+ptq_list <- vector("list", length(cells))
+report_every <- max(1L, as.integer(length(cells) / 20))  # progress every 5%
 
-ptq_list <- foreach(
-  cid       = cells,
-  cell_rows = sim_split[as.character(cells)],  # per-cell slice, not full sim
-  .packages = c("apsimx", "dplyr"),
-  .export   = c("TBASE", "WEATHER_DIR"),       # sim no longer exported
-  .errorhandling = "pass"
-) %dopar% {
+for (i in seq_along(cells)) {
+  cid       <- cells[i]
+  cell_rows <- sim_split[[as.character(cid)]]
+
+  if (i %% report_every == 0L)
+    message(sprintf("[PTQ]   %d / %d cells done (%.0f%%)",
+                    i, length(cells), 100 * i / length(cells)))
 
   met_path <- file.path(WEATHER_DIR, paste0(cid, ".met"))
-  if (!file.exists(met_path)) return(NULL)
+  if (!file.exists(met_path)) next
 
   met <- tryCatch(
     read_apsim_met(met_path, verbose = FALSE),
     error = function(e) NULL
   )
-  if (is.null(met)) return(NULL)
+  if (is.null(met)) next
 
-  ## Daily weather for this cell (all years)
   met_df <- as.data.frame(met) %>%
     dplyr::select(year, day, radn, maxt, mint) %>%
     dplyr::mutate(tmean = (maxt + mint) / 2)
 
   result <- vector("list", nrow(cell_rows))
   for (k in seq_len(nrow(cell_rows))) {
-    r <- cell_rows[k, ]
-
-    ## Subset met to the critical window for this year
+    r   <- cell_rows[k, ]
     win <- dplyr::filter(met_df,
                          year == r$year,
                          day  >= r$pod_doy,
                          day  <= r$mat_doy)
-
     if (nrow(win) < 5) {
-      ## Too few days — flag as NA rather than compute a meaningless value
       result[[k]] <- dplyr::mutate(r,
-        ptq             = NA_real_,
-        critical_radn   = NA_real_,   # mean daily radiation in window
-        critical_tmean  = NA_real_,   # mean daily temperature in window
-        window_days     = as.integer(nrow(win)))
+        ptq            = NA_real_,
+        critical_radn  = NA_real_,
+        critical_tmean = NA_real_,
+        window_days    = as.integer(nrow(win)))
     } else {
       mean_radn  <- mean(win$radn,  na.rm = TRUE)
       mean_tmean <- mean(win$tmean, na.rm = TRUE)
@@ -271,24 +260,13 @@ ptq_list <- foreach(
         window_days    = as.integer(nrow(win)))
     }
   }
-  dplyr::bind_rows(result)
+  ptq_list[[i]] <- dplyr::bind_rows(result)
 }
 
-stopCluster(cl)
-
-## ── Validate parallel output ──────────────────────────────────────────────────
-## Filter to data frames only (error objects come through with .errorhandling = "pass")
-ptq_ok  <- Filter(is.data.frame, ptq_list)
-ptq_err <- Filter(function(x) inherits(x, "condition"), ptq_list)
-
-message(sprintf("[PTQ] Cells processed: %d ok, %d errored, %d no .met file",
-                length(ptq_ok),
-                length(ptq_err),
-                length(cells) - length(ptq_ok) - length(ptq_err)))
-if (length(ptq_err))
-  message("[PTQ] First error: ", conditionMessage(ptq_err[[1]]))
-
-ptq_df <- dplyr::bind_rows(ptq_ok)
+ptq_df <- dplyr::bind_rows(Filter(Negate(is.null), ptq_list))
+n_ok  <- sum(!sapply(ptq_list, is.null))
+message(sprintf("[PTQ] Cells processed: %d ok, %d skipped (no .met file)",
+                n_ok, length(cells) - n_ok))
 
 ## Stop loudly if result is empty or malformed, rather than letting a downstream
 ## filter() silently resolve 'co2' to a stale global variable.

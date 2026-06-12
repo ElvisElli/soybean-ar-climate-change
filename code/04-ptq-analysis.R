@@ -267,7 +267,10 @@ for (i in seq_along(cells)) {
         ptq            = NA_real_,
         critical_radn  = NA_real_,
         critical_tmean = NA_real_,
-        window_days    = as.integer(nrow(win)))
+        window_days    = as.integer(nrow(win)),
+        window_gdd     = NA_real_,
+        cum_radn       = NA_real_,
+        temp_term      = NA_real_)
     } else {
       mean_radn  <- mean(win$radn,  na.rm = TRUE)
       mean_tmean <- mean(win$tmean, na.rm = TRUE)
@@ -275,7 +278,10 @@ for (i in seq_along(cells)) {
         ptq            = mean_radn / (mean_tmean - TBASE),
         critical_radn  = mean_radn,
         critical_tmean = mean_tmean,
-        window_days    = as.integer(nrow(win)))
+        window_days    = as.integer(nrow(win)),
+        window_gdd     = sum(pmax(win$tmean - TBASE, 0), na.rm = TRUE),
+        cum_radn       = sum(win$radn, na.rm = TRUE),
+        temp_term      = mean_tmean - TBASE)
     }
   }
   ptq_list[[i]] <- dplyr::bind_rows(result)
@@ -289,7 +295,8 @@ message(sprintf("[PTQ] Cells processed: %d ok, %d skipped (no .met file)",
 ## Stop loudly if result is empty or malformed, rather than letting a downstream
 ## filter() silently resolve 'co2' to a stale global variable.
 required_out <- c("x", "y", "scenario", "co2", "year", "ptq",
-                  "Yield_kgha", "critical_radn", "critical_tmean", "window_days")
+                  "Yield_kgha", "critical_radn", "critical_tmean",
+                  "window_days", "window_gdd", "cum_radn", "temp_term")
 missing_out  <- setdiff(required_out, names(ptq_df))
 if (nrow(ptq_df) == 0L || length(missing_out))
   stop("[PTQ] ptq_df is empty or missing columns: ",
@@ -473,6 +480,98 @@ ggsave("figures/fig13 - ptq yield relationship.tiff", plot = plot13,
        width = 30, height = 10, units = "cm", dpi = 600,
        compression = "lzw", bg = "white")
 message("[PTQ] Saved: figures/fig13 - ptq yield relationship.tiff")
+
+## ── Helper: build a standard scenario map ────────────────────────────────────
+make_map <- function(data, fill_var, fill_label, palette = "viridis",
+                     direction = 1, dims = c("x", "y", "scenario")) {
+  df_stars <- to_stars_grid(data, dims = dims)
+  ggplot() +
+    geom_sf(data = ark, fill = "grey50", color = "black") +
+    geom_stars(data = df_stars, aes(fill = .data[[fill_var]])) +
+    geom_sf(data = usa_counties, fill = NA, colour = "black", linewidth = 0.5) +
+    coord_sf(xlim = c(360000, 570000)) +
+    facet_wrap(~ scenario, nrow = 1) +
+    temp +
+    scale_fill_viridis_c(option = palette, direction = direction,
+                         na.value = "grey50", name = fill_label) +
+    map_theme
+}
+
+## ── Figure 14: critical period length (days) ─────────────────────────────────
+message("[PTQ] Building Figure 14: critical period length (days)...")
+
+p14_data <- ptq_df %>%
+  filter(co2 == 350, !is.na(window_days)) %>%
+  group_by(x, y, scenario) %>%
+  summarise(days_mean = mean(window_days, na.rm = TRUE), .groups = "drop") %>%
+  mutate(scenario = factor(scenario, levels = scenario_levels,
+                           labels = scenario_labels))
+
+plot14 <- make_map(p14_data, "days_mean",
+                   "Mean critical period (days)", palette = "mako", direction = -1)
+
+ggsave("figures/fig14 - critical period days.tiff", plot = plot14,
+       width = 30, height = 10, units = "cm", dpi = 600,
+       compression = "lzw", bg = "white")
+message("[PTQ] Saved: figures/fig14 - critical period days.tiff")
+
+## ── Figure 15: critical period length (GDD) ──────────────────────────────────
+## GDD = sum of (Tmean − Tbase) over each day in the critical window.
+## Unlike calendar days, GDD accounts for how warm each day was.
+message("[PTQ] Building Figure 15: critical period length (GDD)...")
+
+p15_data <- ptq_df %>%
+  filter(co2 == 350, !is.na(window_gdd)) %>%
+  group_by(x, y, scenario) %>%
+  summarise(gdd_mean = mean(window_gdd, na.rm = TRUE), .groups = "drop") %>%
+  mutate(scenario = factor(scenario, levels = scenario_levels,
+                           labels = scenario_labels))
+
+plot15 <- make_map(p15_data, "gdd_mean",
+                   "Mean critical period GDD (°C·day)", palette = "inferno", direction = -1)
+
+ggsave("figures/fig15 - critical period gdd.tiff", plot = plot15,
+       width = 30, height = 10, units = "cm", dpi = 600,
+       compression = "lzw", bg = "white")
+message("[PTQ] Saved: figures/fig15 - critical period gdd.tiff")
+
+## ── Figure 16: cumulative radiation during critical period ───────────────────
+## Numerator of PTQ × window length: total interceptable energy available.
+message("[PTQ] Building Figure 16: cumulative radiation during critical period...")
+
+p16_data <- ptq_df %>%
+  filter(co2 == 350, !is.na(cum_radn)) %>%
+  group_by(x, y, scenario) %>%
+  summarise(cum_radn_mean = mean(cum_radn, na.rm = TRUE), .groups = "drop") %>%
+  mutate(scenario = factor(scenario, levels = scenario_levels,
+                           labels = scenario_labels))
+
+plot16 <- make_map(p16_data, "cum_radn_mean",
+                   "Mean cumulative radiation (MJ m⁻²)", palette = "plasma", direction = -1)
+
+ggsave("figures/fig16 - cumulative radiation.tiff", plot = plot16,
+       width = 30, height = 10, units = "cm", dpi = 600,
+       compression = "lzw", bg = "white")
+message("[PTQ] Saved: figures/fig16 - cumulative radiation.tiff")
+
+## ── Figure 17: temperature term (Tmean − Tbase) ───────────────────────────────
+## Denominator of PTQ: higher = more heat load, less favourable for seed filling.
+message("[PTQ] Building Figure 17: temperature term (Tmean − Tbase)...")
+
+p17_data <- ptq_df %>%
+  filter(co2 == 350, !is.na(temp_term)) %>%
+  group_by(x, y, scenario) %>%
+  summarise(temp_term_mean = mean(temp_term, na.rm = TRUE), .groups = "drop") %>%
+  mutate(scenario = factor(scenario, levels = scenario_levels,
+                           labels = scenario_labels))
+
+plot17 <- make_map(p17_data, "temp_term_mean",
+                   "Mean temperature term (Tmean − Tbase, °C)", palette = "rocket", direction = -1)
+
+ggsave("figures/fig17 - temperature term.tiff", plot = plot17,
+       width = 30, height = 10, units = "cm", dpi = 600,
+       compression = "lzw", bg = "white")
+message("[PTQ] Saved: figures/fig17 - temperature term.tiff")
 
 ## ── Manuscript stats ──────────────────────────────────────────────────────────
 cat(paste(rep("─", 60), collapse = ""), "\n")

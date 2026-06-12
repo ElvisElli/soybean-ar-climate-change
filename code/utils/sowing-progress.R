@@ -35,9 +35,9 @@ NASS_API_KEY  <- "D228A372-93ED-3BF7-9699-D2D0DDD3C88D"
 FALLBACK_FILE <- "data/raw/progress.xlsx"
 CACHE_FILE    <- "data/raw/nass-progress-cache.rds"
 YEAR_MIN      <- 1990
-YEAR_MAX      <- as.integer(format(Sys.Date(), "%Y"))
+YEAR_MAX      <- as.integer(format(Sys.Date(), "%Y")) - 1L  # exclude current (incomplete) year
 N_RECENT      <- 5
-RECENT_COL    <- "#E07B39"   # single colour for all recent-year lines
+RECENT_COL    <- "#31a354"   # single colour for all recent-year lines
 AVG_COL       <- "#00BF7D"   # average curve colour
 
 ## ── Step 1: Download or load data ────────────────────────────────────────────
@@ -72,7 +72,7 @@ download_nass <- function(api_key) {
       DOY   = as.integer(strftime(week, "%j")),
       value = suppressWarnings(as.numeric(Value)) / 100
     ) %>%
-    filter(!is.na(value), !is.na(DOY), year >= YEAR_MIN)
+    filter(!is.na(value), !is.na(DOY), year >= YEAR_MIN, year <= YEAR_MAX)
   message(sprintf("[Progress] Downloaded %d records (%d–%d).",
                   nrow(df), min(df$year), max(df$year)))
   df
@@ -164,25 +164,25 @@ doy_labels <- c("100\n(Apr 10)", "110\n(Apr 20)", "120\n(Apr 30)",
 plot_all <- ggplot() +
   geom_line(data = pred_curves,
             aes(x = DOY, y = progress, group = year),
-            colour = "grey70", linewidth = 0.35, alpha = 0.7) +
+            colour = "grey70", linewidth = 0.55, alpha = 0.7) +
   geom_hline(yintercept = c(10, 50), linetype = "dashed",
              colour = "grey30", linewidth = 0.45) +
   geom_line(data = avg_curve, aes(x = DOY, y = progress),
             colour = AVG_COL, linewidth = 1.5) +
-  annotate("text", x = avg_doy_10 + 1.5, y = 14,
-           label = sprintf("10%% avg: DOY %.0f (~%s)", avg_doy_10,
+  annotate("text", x = avg_doy_10 - 1, y = 17,
+           label = sprintf("10%% avg\nDOY %.0f (~%s)", avg_doy_10,
                            format(as.Date(paste0("2023-", round(avg_doy_10)), "%Y-%j"), "%b %d")),
-           hjust = 0, size = 3.0, colour = "grey20") +
-  annotate("text", x = avg_doy_50 + 1.5, y = 54,
-           label = sprintf("50%% avg: DOY %.0f (~%s)", avg_doy_50,
+           hjust = 1, size = 3.0, colour = "grey20", lineheight = 0.9) +
+  annotate("text", x = avg_doy_50 - 1, y = 57,
+           label = sprintf("50%% avg\nDOY %.0f (~%s)", avg_doy_50,
                            format(as.Date(paste0("2023-", round(avg_doy_50)), "%Y-%j"), "%b %d")),
-           hjust = 0, size = 3.0, colour = AVG_COL) +
+           hjust = 1, size = 3.0, colour = AVG_COL, lineheight = 0.9) +
   temp +
   scale_x_continuous(name = "Day of year", breaks = doy_breaks, labels = doy_labels) +
   scale_y_continuous(name = "Soybean planting progress (%)",
                      limits = c(0, 100), breaks = seq(0, 100, 20)) +
   labs(caption = sprintf(
-    "Arkansas soybeans, USDA-NASS %d–%d (n = %d years). Grey = individual years; green = average.",
+    "Arkansas soybeans, USDA-NASS %d–%d (n = %d years). Grey lines = individual years; green = average.",
     min(params_df$year), max(params_df$year), nrow(params_df))) +
   theme(plot.caption = element_text(size = 7.5, colour = "grey40"))
 
@@ -205,19 +205,19 @@ avg5_doy_50 <- doy_at_pct(avg5_b, avg5_c, 50)
 avg5_curve  <- data.frame(DOY      = DOY_seq,
                           progress = 100 / (1 + exp(-avg5_b * (DOY_seq - avg5_c))))
 
-## Arrow annotation positions (arrows point from text to curve)
-arr_10_x  <- avg5_doy_10 - 8    # text left of the 10% marker
-arr_50_x  <- avg5_doy_50 + 6    # text right of the 50% marker
+## Arrow annotation positions — text placed well inside plot, arrow points to curve
+arr_10_x  <- avg5_doy_10 + 8    # text to the right of the 10% marker
+arr_50_x  <- avg5_doy_50 - 8    # text to the left of the 50% marker
 
 plot_recent <- ggplot() +
   ## Background years (light grey)
   geom_line(data = pred_bg,
             aes(x = DOY, y = progress, group = year),
             colour = "grey82", linewidth = 0.3, alpha = 0.6) +
-  ## Recent year curves — all same colour, thinner
+  ## Recent year curves — all same colour, thin
   geom_line(data = pred_recent,
             aes(x = DOY, y = progress, group = year),
-            colour = RECENT_COL, linewidth = 0.7, alpha = 0.7) +
+            colour = RECENT_COL, linewidth = 0.45, alpha = 0.7) +
   ## 5-year average — bold
   geom_line(data = avg5_curve, aes(x = DOY, y = progress),
             colour = RECENT_COL, linewidth = 2.0) +
@@ -226,26 +226,26 @@ plot_recent <- ggplot() +
              colour = "grey35", linewidth = 0.4) +
   ## Arrows: text → point on avg5 curve
   annotate("segment",
-           x    = arr_10_x,      y    = 17,
-           xend = avg5_doy_10,   yend = 10.5,
+           x    = arr_10_x - 0.5, y    = 18,
+           xend = avg5_doy_10,    yend = 10.5,
            arrow = arrow(length = unit(0.12, "cm"), type = "closed"),
            colour = RECENT_COL, linewidth = 0.5) +
   annotate("segment",
-           x    = arr_50_x,      y    = 44,
-           xend = avg5_doy_50,   yend = 50,
+           x    = arr_50_x + 0.5, y    = 43,
+           xend = avg5_doy_50,    yend = 50,
            arrow = arrow(length = unit(0.12, "cm"), type = "closed"),
            colour = RECENT_COL, linewidth = 0.5) +
   ## Labels inside plot
   annotate("text",
-           x = arr_10_x, y = 20,
+           x = arr_10_x, y = 22,
            label = sprintf("10%% planted\nDOY %.0f (~%s)", avg5_doy_10,
                            format(as.Date(paste0("2023-", round(avg5_doy_10)), "%Y-%j"), "%b %d")),
-           hjust = 0.5, size = 2.9, colour = RECENT_COL, lineheight = 0.9) +
+           hjust = 0, size = 2.9, colour = RECENT_COL, lineheight = 0.9) +
   annotate("text",
-           x = arr_50_x, y = 40,
+           x = arr_50_x, y = 38,
            label = sprintf("50%% planted\nDOY %.0f (~%s)", avg5_doy_50,
                            format(as.Date(paste0("2023-", round(avg5_doy_50)), "%Y-%j"), "%b %d")),
-           hjust = 0, size = 2.9, colour = RECENT_COL, lineheight = 0.9) +
+           hjust = 1, size = 2.9, colour = RECENT_COL, lineheight = 0.9) +
   temp +
   scale_x_continuous(name = "Day of year", breaks = doy_breaks, labels = doy_labels) +
   scale_y_continuous(name = "Soybean planting progress (%)",

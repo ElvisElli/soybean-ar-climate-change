@@ -1,22 +1,22 @@
 ================================================================
-SIMULATION SUMMARY — 2026-06-10 12:17
+SIMULATION SUMMARY — 2026-06-12 01:11
 ================================================================
 Machine    : CSES-FJMJWM3 (windows)
 Workers    : 38 | Chunk size: 50
-Total time : 1.2 minutes
+Total time : 491.6 minutes
 
 ── Yield by scenario ────────────────────────────────────────
 # A tibble: 9 × 8
   scenario                  co2 cultivar   sowing cells years yield_mean_kgha yield_sd_kgha
   <chr>                   <dbl> <chr>      <chr>  <int> <int>           <dbl>         <dbl>
-1 baseline                  350 PurcellMG4 15-May  4651    40            4452           336
-2 climate_change            350 PurcellMG4 15-May  4651    40            4183           383
-3 climate_change            540 PurcellMG4 15-May  4651    40            5002           400
+1 baseline                  350 PurcellMG4 15-May  4651    40            4452           337
+2 climate_change            350 PurcellMG4 15-May  4651    40            4182           384
+3 climate_change            540 PurcellMG4 15-May  4651    40            5001           401
 4 early_sowing              350 PurcellMG4 15-Apr  4651    40            4369           430
 5 early_sowing              540 PurcellMG4 15-Apr  4651    40            5183           460
 6 early_sowing_longer_mat   350 PurcellMG5 15-Apr  4651    40            4860           482
-7 early_sowing_longer_mat   540 PurcellMG5 15-Apr  4651    40            5790           514
-8 longer_mat                350 PurcellMG5 15-May  4651    40            4480           443
+7 early_sowing_longer_mat   540 PurcellMG5 15-Apr  4651    40            5791           513
+8 longer_mat                350 PurcellMG5 15-May  4651    40            4479           444
 9 longer_mat                540 PurcellMG5 15-May  4651    40            5385           463
 
 ── Coverage check ───────────────────────────────────────────

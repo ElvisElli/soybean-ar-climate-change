@@ -35,7 +35,7 @@ source("code/utils/plot-theme.R")
 dir.create("figures", showWarnings = FALSE)
 
 ## ── Settings ─────────────────────────────────────────────────────────────────
-NASS_API_KEY  <- Sys.getenv("NASS_API_KEY", unset = "")  # set env var or paste key here
+NASS_API_KEY  <- Sys.getenv("D228A372-93ED-3BF7-9699-D2D0DDD3C88D", unset = "")  # set env var or paste key here
 FALLBACK_FILE <- "data/raw/progress.xlsx"
 YEAR_MIN      <- 1990
 YEAR_MAX      <- as.integer(format(Sys.Date(), "%Y"))  # always current year
@@ -324,3 +324,4 @@ params_df %>%
     date_50 = format(as.Date(paste0(year, "-", round(doy_50)), "%Y-%j"), "%b %d")
   ) %>%
   print(n = Inf)
+

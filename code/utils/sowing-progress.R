@@ -27,8 +27,8 @@ dir.create("figures", showWarnings = FALSE)
 ## ── Load and clean USDA-NASS data ────────────────────────────────────────────
 raw <- read_excel("data/raw/progress.xlsx")
 
-## Normalise column names to lowercase
-names(raw) <- toupper(trimws(names(raw)))
+## Normalise column names: remove spaces, uppercase
+names(raw) <- gsub(" ", "_", toupper(trimws(names(raw))))
 
 nass <- raw %>%
   filter(
@@ -41,7 +41,7 @@ nass <- raw %>%
     year  = as.integer(YEAR),
     week  = as.Date(WEEK_ENDING),
     DOY   = as.integer(strftime(week, "%j")),
-    value = VALUE / 100        # convert % to proportion [0, 1]
+    value = VALUE / 100
   ) %>%
   filter(!is.na(value), !is.na(DOY))
 

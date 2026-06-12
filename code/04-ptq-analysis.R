@@ -30,7 +30,6 @@
 ## ============================================================
 
 suppressPackageStartupMessages({
-  library(apsimx)
   library(dplyr)
   library(tidyr)
   library(lubridate)
@@ -87,7 +86,7 @@ detect_weather_dir <- function() {
     }
   }
   ## 3. Repo-relative paths (Linux / cloud / fallback)
-  for (p in c("intermediate-data/weather", "data/raw/weather")) {
+  for (p in c("data/raw/weather_sample", "data/raw/weather", "intermediate-data/weather")) {
     if (dir.exists(p)) {
       message("[PTQ] Weather: repo path — ", normalizePath(p))
       return(normalizePath(p))
@@ -179,6 +178,32 @@ n_bad_window <- sum(sim$pod_doy >= sim$mat_doy, na.rm = TRUE)
 if (n_bad_window > 0)
   warning(sprintf("[PTQ] %d rows have pod_doy >= mat_doy (bad phenology) — these will get NA PTQ.", n_bad_window))
 
+## ── Direct .met file reader (bypasses apsimx path-mangling bug) ──────────────
+## read_apsim_met() prepends "./" to absolute paths on some platforms, causing
+## it to fail even when file.exists() returns TRUE. This function reads the
+## APSIM .met format directly with base R, returning a data.frame with columns:
+## year, day, radn, maxt, mint.
+read_met_direct <- function(path) {
+  lines <- readLines(path, warn = FALSE)
+  ## Find the header row — it contains "year" and "day" separated by whitespace
+  hdr_idx <- which(grepl("^\\s*year\\s+day\\s+", lines, ignore.case = TRUE))[1]
+  if (is.na(hdr_idx)) return(NULL)
+  ## Units row follows the header; data starts after that
+  data_start <- hdr_idx + 2
+  ## Parse column names from header
+  col_names <- tolower(trimws(strsplit(trimws(lines[[hdr_idx]]), "\\s+")[[1]]))
+  ## Read data block
+  df <- tryCatch(
+    utils::read.table(text = lines[data_start:length(lines)],
+                      header = FALSE, col.names = col_names,
+                      fill = TRUE, comment.char = "!"),
+    error = function(e) NULL
+  )
+  if (is.null(df) || !all(c("year","day","radn","maxt","mint") %in% names(df)))
+    return(NULL)
+  df[, c("year","day","radn","maxt","mint")]
+}
+
 ## ── Compute PTQ from daily .met files ────────────────────────────────────────
 ##
 ## For each grid cell × year × scenario:
@@ -196,14 +221,13 @@ needed_cols <- c("cellid", "x", "y", "scenario", "co2", "year",
                  "pod_doy", "mat_doy", "Yield_kgha", "StartPodDAS", "MaturityDAS")
 sim_split <- split(as.data.frame(sim[, needed_cols]), sim$cellid)
 
-## Pre-flight: verify at least one .met file is reachable.
-test_path <- file.path(WEATHER_DIR, paste0(cells[1], ".met"))
-if (!file.exists(test_path))
-  stop("[PTQ] Pre-flight check failed — cannot find .met file for cell ", cells[1], "\n",
-       "  Expected path: ", test_path, "\n",
+## Pre-flight: verify at least one matching .met file is reachable.
+cells_with_met <- cells[cells %in% met_ids_on_disk]
+if (length(cells_with_met) == 0)
+  stop("[PTQ] Pre-flight check failed — no simulation cellids match any .met file.\n",
        "  WEATHER_DIR contains: ", paste(head(met_files, 3), collapse = ", "), " ...\n",
-       "  Simulation cellids start with: ", paste(head(cells, 3), collapse = ", "), "\n",
-       "  Check that LOCAL_DATA_CACHE points to the folder containing the weather/ subfolder.")
+       "  Simulation cellids start with: ", paste(head(cells, 3), collapse = ", "))
+test_path <- file.path(WEATHER_DIR, paste0(cells_with_met[1], ".met"))
 message(sprintf("[PTQ] Pre-flight OK — %s exists.", basename(test_path)))
 
 ## ── Sequential processing ─────────────────────────────────────────────────────
@@ -227,15 +251,9 @@ for (i in seq_along(cells)) {
   met_path <- file.path(WEATHER_DIR, paste0(cid, ".met"))
   if (!file.exists(met_path)) next
 
-  met <- tryCatch(
-    read_apsim_met(met_path, verbose = FALSE),
-    error = function(e) NULL
-  )
-  if (is.null(met)) next
-
-  met_df <- as.data.frame(met) %>%
-    dplyr::select(year, day, radn, maxt, mint) %>%
-    dplyr::mutate(tmean = (maxt + mint) / 2)
+  met_df <- read_met_direct(met_path)
+  if (is.null(met_df)) next
+  met_df$tmean <- (met_df$maxt + met_df$mint) / 2
 
   result <- vector("list", nrow(cell_rows))
   for (k in seq_len(nrow(cell_rows))) {

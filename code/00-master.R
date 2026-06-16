@@ -16,12 +16,12 @@
 ## ═══════════════════════════════════════════════════════════════════════════
 
 ## ── Settings ─────────────────────────────────────────────────────────────
-FORCE_RERUN_SIM    <- TRUE  # TRUE = wipe checkpoints and re-run all APSIM simulations
-FORCE_RERUN_OUTPUT <- TRUE   # TRUE = re-run analysis figures and PDF reports
-RUN_SIM            <- TRUE   # Phase 1: APSIM grid simulation
-RUN_ANALYSIS       <- TRUE   # Phase 2: data analysis + manuscript figures
-RUN_REPORT         <- TRUE   # Phase 3: PDF inspection report (scientific)
-RUN_SIM_REPORT     <- TRUE   # Phase 4: PDF simulation run report (technical)
+FORCE_RERUN_SIM    <- T  # TRUE = wipe checkpoints and re-run all APSIM simulations
+FORCE_RERUN_OUTPUT <- T   # TRUE = re-run analysis figures and PDF reports
+RUN_SIM            <- T   # Phase 1: APSIM grid simulation
+RUN_ANALYSIS       <- T   # Phase 2: data analysis + manuscript figures
+RUN_REPORT         <- T   # Phase 3: PDF inspection report (scientific)
+RUN_SIM_REPORT     <- T   # Phase 4: PDF simulation run report (technical)
 
 ## ── Helpers ──────────────────────────────────────────────────────────────
 .ts <- function() format(Sys.time(), "%H:%M:%S")

@@ -130,7 +130,7 @@ plot_area <- ggplot() +
   ) +
   labs(
     title    = "Irrigated Soybean Area — US Counties",
-    subtitle = sprintf("USDA Census of Agriculture %d  |  grey = no soybean or no irrigation reported  |  sqrt colour scale", CENSUS_YEAR)
+    subtitle = sprintf("USDA Census of Agriculture %d  |  grey = no irrigation reported (rainfed or undisclosed)  |  sqrt colour scale", CENSUS_YEAR)
   ) +
   map_theme
 
@@ -157,7 +157,7 @@ plot_pct <- ggplot() +
   ) +
   labs(
     title    = "Irrigated Soybean as % of Total Soybean Area — US Counties",
-    subtitle = sprintf("USDA Census of Agriculture %d  |  grey = no soybean or no irrigation reported", CENSUS_YEAR)
+    subtitle = sprintf("USDA Census of Agriculture %d  |  grey = no irrigation reported (rainfed or undisclosed)", CENSUS_YEAR)
   ) +
   map_theme
 

@@ -70,14 +70,15 @@ irrigated_df <- clean_nass(raw_irrigated, "acres_irrigated")
 
 soy_df <- full_join(total_df, irrigated_df, by = "fips") %>%
   mutate(
-    acres_irrigated = ifelse(is.na(acres_irrigated), 0, acres_irrigated),
-    pct_irrigated   = ifelse(acres_total > 0,
-                             100 * acres_irrigated / acres_total, NA_real_)
+    ## Keep acres_irrigated as NA when not reported (= no irrigation, shown as grey)
+    ## This ensures both maps use the same set of counties
+    pct_irrigated = ifelse(acres_total > 0 & !is.na(acres_irrigated),
+                           100 * acres_irrigated / acres_total, NA_real_)
   )
 
-message(sprintf("[Map] %d counties with total area | %d with irrigated area",
+message(sprintf("[Map] %d counties with total soybean | %d with irrigated soybean (shown coloured)",
                 sum(!is.na(soy_df$acres_total)),
-                sum(soy_df$acres_irrigated > 0, na.rm = TRUE)))
+                sum(!is.na(soy_df$acres_irrigated))))
 
 ## ── Step 3: Get US county shapefile (tigris) ─────────────────────────────────
 message("[Map] Downloading US county boundaries...")
@@ -129,7 +130,7 @@ plot_area <- ggplot() +
   ) +
   labs(
     title    = "Irrigated Soybean Area — US Counties",
-    subtitle = sprintf("USDA Census of Agriculture %d  |  square-root colour scale", CENSUS_YEAR)
+    subtitle = sprintf("USDA Census of Agriculture %d  |  grey = no soybean or no irrigation reported  |  sqrt colour scale", CENSUS_YEAR)
   ) +
   map_theme
 
@@ -156,7 +157,7 @@ plot_pct <- ggplot() +
   ) +
   labs(
     title    = "Irrigated Soybean as % of Total Soybean Area — US Counties",
-    subtitle = sprintf("USDA Census of Agriculture %d  |  grey = no soybean reported", CENSUS_YEAR)
+    subtitle = sprintf("USDA Census of Agriculture %d  |  grey = no soybean or no irrigation reported", CENSUS_YEAR)
   ) +
   map_theme
 
@@ -173,6 +174,6 @@ soy_df %>%
     irrigated_soy_Macres  = round(sum(acres_irrigated,na.rm=TRUE) / 1e6, 2),
     pct_us_irrigated      = round(100 * sum(acres_irrigated,na.rm=TRUE) /
                                        sum(acres_total,na.rm=TRUE), 1),
-    n_counties_with_irrig = sum(acres_irrigated > 0, na.rm=TRUE)
+    n_counties_with_irrig = sum(!is.na(acres_irrigated))
   ) %>%
   print()

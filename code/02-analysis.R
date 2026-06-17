@@ -5,15 +5,19 @@
 ## Figure order follows the paper (paper-06-17-2026.docx):
 ##
 ##  MAIN MANUSCRIPT
-##   Fig 1  → fig05 - adaptation strategies merged  (violin + map)
+##   Fig 1  → fig05  adaptation strategies merged (violin panel A + map panel B)
+##   Fig 2  → fig09  phenology change maps (crop cycle + seed-filling, panel A/B)
 ##
 ##  SUPPLEMENTARY MATERIAL
-##   Fig S3 → fig06 - environmental characterization
-##   Fig S4 → fig01 - climate change without adaptation (density + map)
-##   Fig S5 → fig02 - temperature impacts (scatter)
+##   Fig S1 → model calibration (external, not generated here)
+##   Fig S2 → biomass validation (external, not generated here)
+##   Fig S3 → fig06  environmental characterization (weather space)
+##   Fig S4 → sowing-progress figures (code/utils/sowing-progress.R)
+##   Fig S5 → fig01  yield density + spatial map (no-adaptation scenarios)
+##   Fig S6 → fig02  temperature–yield scatter
 ##
-##  ADDITIONAL / DIAGNOSTIC (not in paper)
-##   fig03, fig04, fig07–fig10, insp_*
+##  ADDITIONAL / DIAGNOSTIC (not in current paper)
+##   fig03, fig04, fig07, fig08, fig10, insp_*
 ## ============================================================
 
 ## ── 0. Setup ────────────────────────────────────────────────────────────────
@@ -146,8 +150,8 @@ map_theme <- theme(
 )
 
 
-## ── SUPP FIG S4: Yield density + spatial map (climate change without adapt.) ─
-## Paper: Figure S4 — "Density distribution of simulated soybean yields under
+## ── SUPP FIG S5: Yield density + spatial map (climate change without adapt.) ─
+## Paper: Figure S5 — "Density distribution of simulated soybean yields under
 ##        baseline and +2°C scenarios with and without elevated CO2 (A), and
 ##        geographical distribution (B)"
 ## Ridgeline distribution (A) + spatial yield map (B)
@@ -205,7 +209,7 @@ plot1 <- plot_grid(plot1a, plot1b, ncol = 1, align = "v", axis = "r",
 ggsave("figures/fig01 - climate change without adaptation.tiff", plot = plot1,
        width = 20, height = 15, units = "cm", dpi = 600, compression = "lzw", bg = "white")
 
-## ── STATS S4: Supp Fig S4 — baseline yield distribution ─────────────────────
+## ── STATS S5: Supp Fig S5 — baseline yield distribution ─────────────────────
 ## Paper (§3.1): "median baseline yield 4,525 kg/ha with a south-to-north
 ##   gradient ranging from 2,235 to 4,981 kg/ha"
 {
@@ -222,8 +226,8 @@ ggsave("figures/fig01 - climate change without adaptation.tiff", plot = plot1,
   cat(paste(rep("═", 70), collapse=""), "\n\n")
 }
 
-## ── SUPP FIG S5: Temperature–yield scatter ──────────────────────────────── --
-## Paper: Figure S5 — "Relationship between season temperature and soybean seed
+## ── SUPP FIG S6: Temperature–yield scatter ──────────────────────────────── --
+## Paper: Figure S6 — "Relationship between season temperature and soybean seed
 ##        yield across 40 years and 4,651 fields under +2°C scenario"
 ## Yield vs season temperature under +2°C, colored by latitude
 ## Separate regression lines for all data and Warm/Dry site-years
@@ -291,10 +295,10 @@ plot2 <- p2_data %>%
 ggsave("figures/fig02 - temperature impacts.tiff", plot = plot2,
        width = 15, height = 12, units = "cm", dpi = 600, compression = "lzw", bg = "white")
 
-## ── STATS S5: Supp Fig S5 — temperature–yield regression ────────────────────
+## ── STATS S6: Supp Fig S6 — temperature–yield regression ────────────────────
 ## Paper (§3.1): "decreased by 117 kg/ha for every degree increase in season
 ##   temperature"; "167 kg/ha per °C under warm and dry conditions"
-## These are printed during figure construction above (slope_overall, slope_warm_dry)
+## These are also printed during figure construction above (slope_overall, slope_warm_dry)
 {
   cat(paste(rep("═", 70), collapse=""), "\n")
   cat("STATS S5 — SUPP FIG S5: Temperature–yield regression (CO2=350, +2°C)\n")
@@ -813,6 +817,7 @@ ggsave("figures/fig06 - environmental characterization.tiff", plot = plot6,
 ## ══════════════════════════════════════════════════════════════════════════════
 ## ADDITIONAL / DIAGNOSTIC FIGURES — not cited in current paper version
 ## (may support reviewer responses or future manuscript sections)
+## fig07 - fig08: phenology distributions; fig10: water-use efficiency maps
 ## ══════════════════════════════════════════════════════════════════════════════
 
 ## ── Figure 7: Seed-filling duration distribution ─────────────────────── ----
@@ -860,10 +865,11 @@ ggsave("figures/fig08 - phenology timeline by scenario.tiff", plot = plot8,
        width = 22, height = 14, units = "cm", dpi = 600, compression = "lzw", bg = "white")
 
 
-## ── Figure 9: Phenology change maps (without elevated CO2) ───────────── ----
-## A (upper): total crop cycle change (days vs baseline)
-## B (lower): seed-filling period change (days vs baseline)
-## Filtered to CO2 = 350 ppm only
+## ── MAIN FIG 2: Phenology change maps ────────────────────────────────── ----
+## Paper: Figure 2 — "Geographical distribution of the relative effects of
+##        rising temperatures and adaptive strategies on changes in soybean
+##        total crop cycle (A) and seed-filling period (B)"
+## CO2 = 350 ppm only; values per pixel are averages across 40 weather years
 
 p9_baseline <- simulated0 %>%
   filter(scenario == "baseline") %>%
@@ -993,6 +999,64 @@ plot9 <- plot_grid(plot9a, plot9b, ncol = 1, align = "v", axis = "lr")
 ggsave("figures/fig09 - phenology change maps.tiff", plot = plot9,
        width = 18, height = 18, units = "cm", dpi = 600, compression = "lzw", bg = "white")
 
+## ── STATS 2: Main Fig 2 — crop cycle and seed-filling duration changes ───────
+## Paper (§3.2): seed-filling and total crop cycle changes per scenario (CO2=350)
+## Used to fill discussion on phenological mechanisms of synergy
+{
+  cat(paste(rep("═", 70), collapse=""), "\n")
+  cat("STATS 2 — MAIN FIG 2: Phenology changes (CO2=350, vs baseline)\n")
+  cat(paste(rep("─", 70), collapse=""), "\n")
+
+  s350 <- simulated0 %>% filter(co2 == 350)
+  bl_ph <- s350 %>% filter(scenario == "baseline") %>%
+    select(x, y, date,
+           sf_bl  = SeedFillingDAS, mat_bl = MaturityDAS, emg_bl = EmergenceDAS)
+
+  ph_data <- s350 %>%
+    filter(scenario %in% c("climate_change","longer_mat","early_sowing",
+                           "early_sowing_longer_mat")) %>%
+    select(x, y, date, scenario, SeedFillingDAS, MaturityDAS, EmergenceDAS) %>%
+    left_join(bl_ph, by = c("x","y","date")) %>%
+    mutate(
+      sf_dur    = MaturityDAS - SeedFillingDAS,
+      sf_dur_bl = mat_bl     - sf_bl,
+      tc_dur    = MaturityDAS - EmergenceDAS,
+      tc_dur_bl = mat_bl     - emg_bl,
+      sf_chg    = sf_dur - sf_dur_bl,
+      tc_chg    = tc_dur - tc_dur_bl
+    )
+
+  cat("\nTotal crop-cycle change vs baseline (days, mean ± sd):\n")
+  ph_data %>% group_by(scenario) %>%
+    summarise(mean = round(mean(tc_chg, na.rm=TRUE), 1),
+              sd   = round(sd(tc_chg,   na.rm=TRUE), 1),
+              min  = round(min(tc_chg,   na.rm=TRUE), 1),
+              max  = round(max(tc_chg,   na.rm=TRUE), 1), .groups="drop") %>%
+    print()
+
+  cat("\nSeed-filling duration change vs baseline (days, mean ± sd):\n")
+  ph_data %>% group_by(scenario) %>%
+    summarise(mean = round(mean(sf_chg, na.rm=TRUE), 1),
+              sd   = round(sd(sf_chg,   na.rm=TRUE), 1),
+              min  = round(min(sf_chg,   na.rm=TRUE), 1),
+              max  = round(max(sf_chg,   na.rm=TRUE), 1), .groups="drop") %>%
+    print()
+
+  # Absolute durations for context
+  cat("\nAbsolute durations (days, mean across all site-years):\n")
+  cat(sprintf("  Baseline seed-filling: %.1f days | crop cycle: %.1f days\n",
+      mean(ph_data$sf_dur_bl, na.rm=TRUE), mean(ph_data$tc_dur_bl, na.rm=TRUE)))
+  ph_data %>% group_by(scenario) %>%
+    summarise(sf = round(mean(sf_dur, na.rm=TRUE), 1),
+              tc = round(mean(tc_dur, na.rm=TRUE), 1), .groups="drop") %>%
+    print()
+
+  cat(paste(rep("═", 70), collapse=""), "\n\n")
+}
+
+## ══════════════════════════════════════════════════════════════════════════════
+## SUPPLEMENTARY FIGURES — generated here; S1/S2 are external (not generated)
+## ══════════════════════════════════════════════════════════════════════════════
 
 ## ── Figure 10: Water-use efficiency spatial maps ──────────────────────── ----
 ## One TIFF per variable; CO2 = 350 only; faceted by scenario

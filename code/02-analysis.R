@@ -9,12 +9,12 @@
 ##   Fig 2  → fig09  phenology change maps (crop cycle + seed-filling, panel A/B)
 ##
 ##  SUPPLEMENTARY MATERIAL
-##   Fig S1 → model calibration (external, not generated here)
-##   Fig S2 → biomass validation (external, not generated here)
-##   Fig S3 → fig06  environmental characterization (weather space)
-##   Fig S4 → sowing-progress figures (code/utils/sowing-progress.R)
-##   Fig S5 → fig01  yield density + spatial map (no-adaptation scenarios)
-##   Fig S6 → fig02  temperature–yield scatter
+##   Fig S1 → EXTERNAL — MET locations map + phenology calibration + yield calibration
+##   Fig S2 → EXTERNAL — biomass validation (simulated vs observed, Fayetteville 2008)
+##   Fig S3 → FigS3-environmental-characterization.tiff
+##   Fig S4 → FigS4-sowing-progress-all-years.tiff
+##   Fig S5 → FigS5-yield-density-no-adaptation.tiff
+##   Fig S6 → FigS6-temperature-yield-scatter.tiff
 ##
 ##  ADDITIONAL / DIAGNOSTIC (not in current paper)
 ##   ExtraFig1 → yield change by scenario (violin)
@@ -22,6 +22,7 @@
 ##   ExtraFig3 → seed-filling duration distribution
 ##   ExtraFig4 → phenology timeline by stage
 ##   ExtraFig5 → water-use efficiency spatial maps
+##   ExtraFig6 → sowing progress recent 5 years
 ## ============================================================
 
 ## ── 0. Setup ─────────────────────────────────────────────────────────────────
@@ -159,9 +160,12 @@ map_theme <- theme(
 ## ══════════════════════════════════════════════════════════════════════════════
 
 ## ── MAIN FIG 1: Adaptation strategies — merged (violin + map) ──────────── ----
-## Paper: Figure 1 — "Overall relative effects of rising temperatures and
-##        adaptive genotypic and agronomic management strategies on soybean
-##        seed yield across 4,651 fields (A), and geographical distribution (B)"
+## Paper: Figure 1 — "Overall relative effects of rising temperatures and adaptive
+##        genotypic and agronomic management strategies on soybean seed yield
+##        across 4,651 soybean fields and 40 weather years in the US Mid-South (A),
+##        and their geographical distribution (B). Values per pixel in panel B are
+##        averages across 40 weather years. LM & ES represent the combined effect
+##        of a late-maturing variety and early sowing."
 ## Combined manuscript figure: half-violin + boxplot (panel A) + spatial map (panel B)
 
 p5_baseline <- simulated0 %>%
@@ -470,10 +474,13 @@ cat(paste(rep("─", 65), collapse = ""), "\n\n")
 
 
 ## ── MAIN FIG 2: Phenology change maps ────────────────────────────────────── ----
-## Paper: Figure 2 — "Geographical distribution of the relative effects of
-##        rising temperatures and adaptive strategies on changes in soybean
-##        total crop cycle (A) and seed-filling period (B)"
-## CO2 = 350 ppm only; values per pixel are averages across 40 weather years
+## Paper: Figure 2 — "Geographical distribution of the relative effects of rising
+##        temperatures and adaptive genotypic and agronomic management strategies
+##        on changes in soybean total crop cycle and seed-filling period across
+##        4,651 soybean fields in the US Mid-South. Values per pixel are averages
+##        across 40 weather years. LM & ES represent the combined effect of a
+##        late-maturing variety and early sowing."
+## CO2 = 350 ppm only; panels A (crop cycle) and B (seed-filling period)
 
 p9_baseline <- simulated0 %>%
   filter(scenario == "baseline") %>%
@@ -640,14 +647,33 @@ ggsave("figures/Fig2-phenology-change-maps.tiff", plot = plot9,
 
 ## ══════════════════════════════════════════════════════════════════════════════
 ## SUPPLEMENTARY FIGURES
-## S1 (calibration) and S2 (biomass validation) are external — not generated here
 ## ══════════════════════════════════════════════════════════════════════════════
+
+## ── SUPP FIG S1: MET locations + phenology calibration + yield calibration ── ----
+## Paper: Figure S1 — "Locations of multi-environment trials used to collect
+##        phenology and yield data for soybean maturity groups 4 to 5 (A).
+##        Relationship between APSIM-simulated and observed DOY for key
+##        phenological stages: emergence, beginning of flowering, beginning of
+##        pod development, beginning of seed filling, and physiological maturity (B).
+##        Relationship between APSIM-simulated and observed soybean yield at
+##        13% grain moisture (C)."
+## → EXTERNAL FIGURE — generated outside this script (model calibration dataset)
+
+## ── SUPP FIG S2: Biomass validation — Fayetteville 2008 ─────────────────── ----
+## Paper: Figure S2 — "APSIM-simulated (lines) and measured (points) leaf biomass
+##        (green), seed biomass (black), and total biomass (yellow) in Fayetteville,
+##        NW Arkansas, for 2 maturity groups (early MG4 and early MG5). Measured
+##        data from irrigated experiment in 2008 (RCBD, 4 reps; Mastrodomenico &
+##        Purcell, 2012). RMSEs: seed yield 659 kg/ha, leaf biomass 572 kg/ha,
+##        total biomass 1335 kg/ha."
+## → EXTERNAL FIGURE — generated outside this script (biomass validation dataset)
 
 ## ── SUPP FIG S3: Environmental characterization ──────────────────────────── ----
 ## Paper: Figure S3 — "Environmental characterization of baseline conditions
 ##        across all studied site-years. The APSIM phenology response curve (0-1)
-##        is presented; solid lines indicate median growing-season temperature
-##        and total precipitation."
+##        is presented, where 1 represents maximum development rate. The solid
+##        vertical and horizontal lines indicate the median growing-season average
+##        temperature and total growing-season precipitation, respectively."
 
 p6_weather <- simulated0 %>%
   filter(scenario == "baseline", co2 == 350) %>%
@@ -711,11 +737,12 @@ ggsave("figures/FigS3-environmental-characterization.tiff", plot = plot6,
 
 
 ## ── SUPP FIG S4: Soybean sowing progress in Arkansas ────────────────────── ----
-## Paper: Figure S4 — "USDA-NASS soybean sowing progress in Arkansas 1990–2025.
-##        Grey lines represent historical years; green thicker line is the average.
-##        50% and 10% average sowing progress are annotated."
-## Figures: FigS4-sowing-progress-all-years.tiff
-##          FigS4-sowing-progress-recent-5yr.tiff
+## Paper: Figure S4 — "USDA-NASS soybean sowing progress in Arkansas from 1990
+##        to 2025. Grey lines represent the historical years, while the green,
+##        thicker line indicates the average sowing progress. 50% and 10% average
+##        sowing progress are indicated in the figure."
+## Figure: FigS4-sowing-progress-all-years.tiff
+## Also generates: ExtraFig6-sowing-progress-recent-5yr.tiff (not in paper)
 
 suppressPackageStartupMessages({
   library(purrr)
@@ -953,10 +980,10 @@ plot_progress_recent <- ggplot() +
   scale_y_continuous(name = "Soybean planting progress (%)",
                      limits = c(0, 100), breaks = seq(0, 100, 20))
 
-ggsave("figures/FigS4-sowing-progress-recent-5yr.tiff", plot = plot_progress_recent,
+ggsave("figures/ExtraFig6-sowing-progress-recent-5yr.tiff", plot = plot_progress_recent,
        width = 16, height = 11, units = "cm",
        dpi = 600, compression = "lzw", bg = "white")
-cat("[Progress] Saved: figures/FigS4-sowing-progress-recent-5yr.tiff\n")
+cat("[Progress] Saved: figures/ExtraFig6-sowing-progress-recent-5yr.tiff\n")
 
 cat(sprintf("\n── Per-year 50%% and 10%% planting DOY (%d–%d) ──\n",
             min(params_df$year), max(params_df$year)))
@@ -973,7 +1000,7 @@ params_df %>%
 ## ── SUPP FIG S5: Yield density + spatial map (climate change without adapt.) ── ----
 ## Paper: Figure S5 — "Density distribution of simulated soybean yields without
 ##        adaptation under the baseline and +2°C scenarios with and without
-##        elevated [CO2] (A), and its geographical distribution (B)"
+##        elevated [CO2] (A), and its geographical distribution (B)."
 
 p1_data <- simulated0 %>%
   filter(scenario %in% c("baseline", "climate_change")) %>%
@@ -1047,8 +1074,10 @@ ggsave("figures/FigS5-yield-density-no-adaptation.tiff", plot = plot1,
 
 ## ── SUPP FIG S6: Temperature–yield scatter ────────────────────────────────── ----
 ## Paper: Figure S6 — "Relationship between season temperature (May-October) and
-##        soybean seed yield across 40 years and 4,651 fields under a 2°C
-##        temperature increase scenario without adaptation"
+##        soybean seed yield across 40 years and 4,651 fields in the US Mid-South
+##        under a 2°C temperature increase scenario without adaptation. The text
+##        in the panel represents the equation slopes for the overall data and for
+##        filtered Warm/Dry site-years."
 ## Yield vs season temperature under +2°C, colored by latitude
 
 p2_data <- simulated0 %>%

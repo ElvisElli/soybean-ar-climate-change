@@ -83,6 +83,7 @@ irrigated_df <- clean_nass_irrigated(raw_irrigated)
 
 soy_df <- left_join(total_df, irrigated_df, by = "fips") %>%
   mutate(
+    state_fips    = substr(fips, 1, 2),
     pct_irrigated = ifelse(acres_total > 0 & !is.na(acres_irrigated),
                            100 * acres_irrigated / acres_total, NA_real_)
   )
@@ -91,6 +92,40 @@ n_known     <- sum(!is.na(soy_df$acres_irrigated), na.rm = TRUE)
 n_withheld  <- sum(isTRUE(soy_df$irrig_withheld) | soy_df$irrig_withheld, na.rm = TRUE)
 message(sprintf("[Map] %d counties with total soybean | %d with known irrigated area | %d withheld (D)",
                 nrow(total_df), n_known, n_withheld))
+
+## ── State-level statistics ───────────────────────────────────────────────────
+## State FIPS → abbreviation lookup (contiguous US only)
+fips_to_state <- c(
+  "01"="AL","04"="AZ","05"="AR","06"="CA","08"="CO","09"="CT","10"="DE",
+  "12"="FL","13"="GA","16"="ID","17"="IL","18"="IN","19"="IA","20"="KS",
+  "21"="KY","22"="LA","23"="ME","24"="MD","25"="MA","26"="MI","27"="MN",
+  "28"="MS","29"="MO","30"="MT","31"="NE","32"="NV","33"="NH","34"="NJ",
+  "35"="NM","36"="NY","37"="NC","38"="ND","39"="OH","40"="OK","41"="OR",
+  "42"="PA","44"="RI","45"="SC","46"="SD","47"="TN","48"="TX","49"="UT",
+  "50"="VT","51"="VA","53"="WA","54"="WV","55"="WI","56"="WY"
+)
+
+state_stats <- soy_df %>%
+  group_by(state_fips) %>%
+  summarise(
+    state            = fips_to_state[state_fips[1]],
+    total_soy_acres  = sum(acres_total,    na.rm = TRUE),
+    irrig_acres      = sum(acres_irrigated, na.rm = TRUE),
+    pct_irrigated    = round(100 * irrig_acres / total_soy_acres, 1),
+    n_counties_known = sum(!is.na(acres_irrigated)),
+    n_counties_withheld = sum(irrig_withheld, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  filter(!state_fips %in% c("02","15","60","66","69","72","78")) %>%
+  arrange(desc(irrig_acres))
+
+cat(sprintf("\n── State-level irrigated soybean summary (%d Census) ──\n", CENSUS_YEAR))
+print(state_stats, n = Inf)
+
+write.csv(state_stats, "figures/state_irrigated_soy_stats.csv", row.names = FALSE)
+message("[Map] Saved: figures/state_irrigated_soy_stats.csv")
+
+MIN_ACRES <- 500  # suppress counties with < 500 known irrigated acres
 
 ## ── Step 3: Get US county shapefile (tigris) ─────────────────────────────────
 message("[Map] Downloading US county boundaries...")
@@ -126,9 +161,9 @@ map_theme <- theme_void() +
 
 ## Split map_sf into layers for clean rendering:
 ##   withheld  = county has irrigated soy but amount suppressed by NASS "(D)"
-##   known     = county has a numeric irrigated area value
+##   known     = county has >= MIN_ACRES known irrigated area (suppress noise)
 map_withheld <- filter(map_sf, !is.na(irrig_withheld) & irrig_withheld)
-map_known    <- filter(map_sf, !is.na(acres_irrigated))
+map_known    <- filter(map_sf, !is.na(acres_irrigated) & acres_irrigated >= MIN_ACRES)
 
 WITHHELD_COL <- "#d4b483"   # warm tan — "data exists but undisclosed"
 
@@ -155,7 +190,8 @@ plot_area <- ggplot() +
            label = paste0("■ = irrigation present, amount withheld by NASS (n = ", n_withheld, " counties)")) +
   labs(
     title    = "Irrigated Soybean Area — US Counties",
-    subtitle = sprintf("USDA Census of Agriculture %d  |  grey = no irrigation reported  |  tan = data withheld  |  sqrt colour scale", CENSUS_YEAR)
+    subtitle = paste0("USDA Census of Agriculture ", CENSUS_YEAR,
+                      "  |  grey = no irrigation / <500 acres  |  tan = data withheld  |  sqrt colour scale")
   ) +
   map_theme
 
@@ -188,7 +224,7 @@ plot_pct <- ggplot() +
   labs(
     title    = "Irrigated Soybean as % of Total Soybean Area — US Counties",
     subtitle = paste0("USDA Census of Agriculture ", CENSUS_YEAR,
-                      "  |  grey = no irrigation  |  tan = data withheld  |  % of county soybean area")
+                      "  |  grey = no irrigation / <500 acres  |  tan = data withheld  |  % of county soybean area")
   ) +
   map_theme
 

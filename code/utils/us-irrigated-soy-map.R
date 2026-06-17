@@ -54,31 +54,43 @@ raw_total    <- fetch_nass("SOYBEANS - ACRES HARVESTED")
 raw_irrigated <- fetch_nass("SOYBEANS, IRRIGATED - ACRES HARVESTED")
 
 ## ── Step 2: Clean and join ───────────────────────────────────────────────────
-clean_nass <- function(df, value_col) {
+## NASS withholds county data as "(D)" when fewer than 3 operations exist,
+## to protect individual farm confidentiality. These counties DO have irrigated
+## soybeans but the amount is unknown. We track them separately so they can
+## be shown distinctly on the map rather than lumped with "no irrigation".
+
+clean_nass_total <- function(df) {
   df %>%
     transmute(
-      state_fips  = state_fips_code,
-      county_fips = county_code,
       fips        = paste0(state_fips_code, county_code),
-      !!value_col := suppressWarnings(as.numeric(gsub(",", "", Value)))
+      acres_total = suppressWarnings(as.numeric(gsub(",", "", Value)))
     ) %>%
-    filter(!is.na(.data[[value_col]]))
+    filter(!is.na(acres_total))
 }
 
-total_df    <- clean_nass(raw_total,     "acres_total")
-irrigated_df <- clean_nass(raw_irrigated, "acres_irrigated")
+clean_nass_irrigated <- function(df) {
+  df %>%
+    transmute(
+      fips            = paste0(state_fips_code, county_code),
+      acres_irrigated = suppressWarnings(as.numeric(gsub(",", "", Value))),
+      irrig_withheld  = is.na(suppressWarnings(as.numeric(gsub(",", "", Value)))) &
+                        trimws(Value) != ""   # "(D)" rows: data exists but suppressed
+    )
+}
 
-soy_df <- full_join(total_df, irrigated_df, by = "fips") %>%
+total_df     <- clean_nass_total(raw_total)
+irrigated_df <- clean_nass_irrigated(raw_irrigated)
+
+soy_df <- left_join(total_df, irrigated_df, by = "fips") %>%
   mutate(
-    ## Keep acres_irrigated as NA when not reported (= no irrigation, shown as grey)
-    ## This ensures both maps use the same set of counties
     pct_irrigated = ifelse(acres_total > 0 & !is.na(acres_irrigated),
                            100 * acres_irrigated / acres_total, NA_real_)
   )
 
-message(sprintf("[Map] %d counties with total soybean | %d with irrigated soybean (shown coloured)",
-                sum(!is.na(soy_df$acres_total)),
-                sum(!is.na(soy_df$acres_irrigated))))
+n_known     <- sum(!is.na(soy_df$acres_irrigated), na.rm = TRUE)
+n_withheld  <- sum(isTRUE(soy_df$irrig_withheld) | soy_df$irrig_withheld, na.rm = TRUE)
+message(sprintf("[Map] %d counties with total soybean | %d with known irrigated area | %d withheld (D)",
+                nrow(total_df), n_known, n_withheld))
 
 ## ── Step 3: Get US county shapefile (tigris) ─────────────────────────────────
 message("[Map] Downloading US county boundaries...")
@@ -112,25 +124,38 @@ map_theme <- theme_void() +
     plot.margin       = margin(5, 5, 5, 5)
   )
 
+## Split map_sf into layers for clean rendering:
+##   withheld  = county has irrigated soy but amount suppressed by NASS "(D)"
+##   known     = county has a numeric irrigated area value
+map_withheld <- filter(map_sf, !is.na(irrig_withheld) & irrig_withheld)
+map_known    <- filter(map_sf, !is.na(acres_irrigated))
+
+WITHHELD_COL <- "#d4b483"   # warm tan — "data exists but undisclosed"
+
 ## ── Figure 1: irrigated soybean area (acres) ─────────────────────────────────
 message("[Map] Building fig_soy_irrigated_area...")
 
 plot_area <- ggplot() +
-  geom_sf(data = map_sf, aes(fill = acres_irrigated / 1000),
+  geom_sf(data = map_sf,       fill = "grey90", colour = NA, linewidth = 0) +
+  geom_sf(data = map_withheld, fill = WITHHELD_COL, colour = NA, linewidth = 0) +
+  geom_sf(data = map_known,    aes(fill = acres_irrigated / 1000),
           colour = NA, linewidth = 0) +
   geom_sf(data = states_sf, fill = NA, colour = "white", linewidth = 0.3) +
   scale_fill_viridis_c(
     option    = "plasma",
     direction = -1,
-    na.value  = "grey88",
+    na.value  = "grey90",
     name      = "Thousand\nacres",
-    trans     = "sqrt",           # square-root scale to show skewed distribution
+    trans     = "sqrt",
     labels    = label_number(accuracy = 1),
     breaks    = c(0, 10, 50, 100, 200, 400)
   ) +
+  annotate("text", x = Inf, y = -Inf, hjust = 1.05, vjust = -0.5, size = 2.8,
+           colour = "grey30",
+           label = paste0("■ = irrigation present, amount withheld by NASS (n = ", n_withheld, " counties)")) +
   labs(
     title    = "Irrigated Soybean Area — US Counties",
-    subtitle = sprintf("USDA Census of Agriculture %d  |  grey = no irrigation reported (rainfed or undisclosed)  |  sqrt colour scale", CENSUS_YEAR)
+    subtitle = sprintf("USDA Census of Agriculture %d  |  grey = no irrigation reported  |  tan = data withheld  |  sqrt colour scale", CENSUS_YEAR)
   ) +
   map_theme
 
@@ -143,21 +168,27 @@ message("[Map] Saved: figures/fig_soy_irrigated_area.tiff")
 message("[Map] Building fig_soy_irrigated_pct...")
 
 plot_pct <- ggplot() +
-  geom_sf(data = map_sf, aes(fill = pct_irrigated),
+  geom_sf(data = map_sf,       fill = "grey90", colour = NA, linewidth = 0) +
+  geom_sf(data = map_withheld, fill = WITHHELD_COL, colour = NA, linewidth = 0) +
+  geom_sf(data = map_known,    aes(fill = pct_irrigated),
           colour = NA, linewidth = 0) +
   geom_sf(data = states_sf, fill = NA, colour = "white", linewidth = 0.3) +
   scale_fill_viridis_c(
-    option   = "mako",
+    option    = "mako",
     direction = -1,
-    na.value = "grey88",
-    name     = "% irrigated",
-    limits   = c(0, 100),
-    breaks   = c(0, 25, 50, 75, 100),
-    labels   = label_percent(scale = 1, accuracy = 1)
+    na.value  = "grey90",
+    name      = "% irrigated",
+    limits    = c(0, 100),
+    breaks    = c(0, 25, 50, 75, 100),
+    labels    = label_percent(scale = 1, accuracy = 1)
   ) +
+  annotate("text", x = Inf, y = -Inf, hjust = 1.05, vjust = -0.5, size = 2.8,
+           colour = "grey30",
+           label = paste0("■ = irrigation present, amount withheld by NASS (n = ", n_withheld, " counties)")) +
   labs(
     title    = "Irrigated Soybean as % of Total Soybean Area — US Counties",
-    subtitle = sprintf("USDA Census of Agriculture %d  |  grey = no irrigation reported (rainfed or undisclosed)", CENSUS_YEAR)
+    subtitle = paste0("USDA Census of Agriculture ", CENSUS_YEAR,
+                      "  |  grey = no irrigation  |  tan = data withheld  |  % of county soybean area")
   ) +
   map_theme
 

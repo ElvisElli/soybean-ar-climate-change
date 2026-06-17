@@ -273,12 +273,14 @@ ggsave("figures/Fig1-yield-adaptation-strategies.tiff", plot = plot5_merged,
   smry <- function(df, grp) {
     df %>% group_by(across(all_of(grp))) %>%
       summarise(
+        n_fields = n_distinct(paste(x, y)),
         mean    = round(mean(pct_chg,                    na.rm = TRUE), 1),
         median  = round(median(pct_chg,                  na.rm = TRUE), 1),
         q1      = round(quantile(pct_chg, 0.25,          na.rm = TRUE), 1),
         q3      = round(quantile(pct_chg, 0.75,          na.rm = TRUE), 1),
         min     = round(min(pct_chg,                     na.rm = TRUE), 1),
         max     = round(max(pct_chg,                     na.rm = TRUE), 1),
+        n_pos   = sum(pct_chg > 0,                       na.rm = TRUE),
         pct_pos = round(mean(pct_chg > 0,                na.rm = TRUE) * 100, 1),
         .groups = "drop")
   }
@@ -547,12 +549,14 @@ ggsave("figures/Fig2-phenology-change-maps.tiff", plot = plot9,
   ph_smry <- function(df, var) {
     df %>% group_by(scenario) %>%
       summarise(
+        n_units = n_distinct(paste(x, y)),
         mean    = round(mean(.data[[var]],                 na.rm = TRUE), 1),
         median  = round(median(.data[[var]],               na.rm = TRUE), 1),
         q1      = round(quantile(.data[[var]], 0.25,       na.rm = TRUE), 1),
         q3      = round(quantile(.data[[var]], 0.75,       na.rm = TRUE), 1),
         min     = round(min(.data[[var]],                  na.rm = TRUE), 1),
         max     = round(max(.data[[var]],                  na.rm = TRUE), 1),
+        n_pos   = sum(.data[[var]] > 0,                    na.rm = TRUE),
         pct_pos = round(mean(.data[[var]] > 0,             na.rm = TRUE) * 100, 1),
         .groups = "drop")
   }
@@ -1008,20 +1012,84 @@ plot1 <- plot_grid(plot1a, plot1b, ncol = 1, align = "v", axis = "r",
 ggsave("figures/FigS5-yield-density-no-adaptation.tiff", plot = plot1,
        width = 20, height = 15, units = "cm", dpi = 600, compression = "lzw", bg = "white")
 
-## ── STATS S5: Supp Fig S5 — baseline yield distribution ──────────────────────
-## Paper (§3.1): "median baseline yield 4,525 kg/ha with a south-to-north
-##   gradient ranging from 2,235 to 4,981 kg/ha"
+## ── STATS S5: Supp Fig S5 — yield distribution at two spatial scales ─────────
+## Mirrors exactly what the figure shows:
+##   Panel A (ridgeline density) → across site-years (all fields × all years)
+##   Panel B (spatial map)       → across sites      (40-yr mean per field)
+## Three scenario_co2 groups: Baseline / 2°C-increase / 2°C-increase with CO2
+## Also reports yield change (%) vs baseline for the two climate scenarios.
 {
   cat(paste(rep("═", 70), collapse=""), "\n")
-  cat("STATS S5 — SUPP FIG S5: Baseline yield distribution\n")
+  cat("STATS S5 — SUPP FIG S5: Yield distribution (no adaptation)\n")
   cat(paste(rep("─", 70), collapse=""), "\n")
-  bl <- simulated0 %>% filter(scenario == "baseline") %>%
-        group_by(x, y) %>% summarise(yield = mean(Yield_kgha, na.rm=TRUE), .groups="drop")
-  cat(sprintf("  Median field-mean baseline yield: %.0f kg/ha\n", median(bl$yield, na.rm=TRUE)))
-  cat(sprintf("  Field-mean yield range:           %.0f – %.0f kg/ha\n",
-              min(bl$yield, na.rm=TRUE), max(bl$yield, na.rm=TRUE)))
-  cat(sprintf("  Mean baseline yield (all site-years): %.0f kg/ha\n",
-              mean(simulated0$Yield_kgha[simulated0$scenario=="baseline"], na.rm=TRUE)))
+
+  s5_raw <- simulated0 %>%
+    filter(scenario %in% c("baseline", "climate_change")) %>%
+    mutate(scenario_co2 = factor(
+      paste0(scenario, "_co2", co2),
+      levels = c("baseline_co2350", "climate_change_co2350", "climate_change_co2540"),
+      labels = c("Baseline", "2°C-increase", "2°C-increase + CO2")))
+
+  ## ── Across sites: 40-yr mean per field (= what panel B map shows) ──────────
+  s5_sites <- s5_raw %>%
+    group_by(x, y, scenario_co2) %>%
+    summarise(Yield_kgha = mean(Yield_kgha, na.rm = TRUE), .groups = "drop")
+
+  yld_smry <- function(df) {
+    df %>% group_by(scenario_co2) %>%
+      summarise(
+        n_fields = n_distinct(paste(x, y)),
+        mean     = round(mean(Yield_kgha,             na.rm = TRUE), 0),
+        median   = round(median(Yield_kgha,           na.rm = TRUE), 0),
+        q1       = round(quantile(Yield_kgha, 0.25,  na.rm = TRUE), 0),
+        q3       = round(quantile(Yield_kgha, 0.75,  na.rm = TRUE), 0),
+        min      = round(min(Yield_kgha,              na.rm = TRUE), 0),
+        max      = round(max(Yield_kgha,              na.rm = TRUE), 0),
+        .groups  = "drop")
+  }
+
+  cat("\n── ACROSS SITES (40-yr mean per field — what map panel B shows) ──\n")
+  yld_smry(s5_sites) %>% print()
+
+  cat("\n── ACROSS SITE-YEARS (all fields × all years — what ridgeline panel A shows) ──\n")
+  yld_smry(s5_raw) %>% print()
+
+  ## ── Yield change vs baseline ────────────────────────────────────────────────
+  bl_sy <- simulated0 %>%
+    filter(scenario == "baseline") %>%
+    select(x, y, date, yield_bl = Yield_kgha)
+
+  s5_chg_sy <- simulated0 %>%
+    filter(scenario == "climate_change") %>%
+    left_join(bl_sy, by = c("x", "y", "date")) %>%
+    mutate(pct_chg    = (Yield_kgha - yield_bl) / yield_bl * 100,
+           scenario_co2 = ifelse(co2 == 350, "2°C-increase", "2°C-increase + CO2"))
+
+  s5_chg_sites <- s5_chg_sy %>%
+    group_by(x, y, scenario_co2) %>%
+    summarise(pct_chg = mean(pct_chg, na.rm = TRUE), .groups = "drop")
+
+  chg_smry <- function(df) {
+    df %>% group_by(scenario_co2) %>%
+      summarise(
+        n_fields = n_distinct(paste(x, y)),
+        mean     = round(mean(pct_chg,                na.rm = TRUE), 1),
+        median   = round(median(pct_chg,              na.rm = TRUE), 1),
+        q1       = round(quantile(pct_chg, 0.25,     na.rm = TRUE), 1),
+        q3       = round(quantile(pct_chg, 0.75,     na.rm = TRUE), 1),
+        min      = round(min(pct_chg,                 na.rm = TRUE), 1),
+        max      = round(max(pct_chg,                 na.rm = TRUE), 1),
+        n_pos    = sum(pct_chg > 0,                   na.rm = TRUE),
+        pct_pos  = round(mean(pct_chg > 0,            na.rm = TRUE) * 100, 1),
+        .groups  = "drop")
+  }
+
+  cat("\n── YIELD CHANGE vs BASELINE (%) ──\n")
+  cat("Across sites (40-yr mean per field):\n")
+  chg_smry(s5_chg_sites) %>% print()
+  cat("\nAcross site-years (all fields × all years):\n")
+  chg_smry(s5_chg_sy) %>% print()
+
   cat(paste(rep("═", 70), collapse=""), "\n\n")
 }
 

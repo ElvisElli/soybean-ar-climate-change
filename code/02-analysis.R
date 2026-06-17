@@ -243,103 +243,84 @@ plot5_merged <- plot_grid(
 ggsave("figures/Fig1-yield-adaptation-strategies.tiff", plot = plot5_merged,
        width = 30, height = 15, units = "cm", dpi = 600, compression = "lzw", bg = "white")
 
-## ── STATS 1: Main Fig 1 — all cited numbers for Results §3.1 and §3.2 ────────
-## Paper cites (§3.1): "decreased yields 5.9% on average, values ranging from
-##   -14.8% to +2.6%"; "median baseline yield 4,525 kg/ha"; "117 kg/ha per °C";
-##   "167 kg/ha per °C under warm/dry"; "12.4% greater under combined elevated T+CO2"
-## Paper cites (§3.2): "increased yield by [X]% under 2°C without CO2";
-##   "standalone LM: median yields comparable to baseline"; "61% of fields positive"
-##   "combined elevated CO2 + stacked management increased yields 30%, 16-44%"
+## ── STATS 1: Main Fig 1 — yield change statistics at two spatial scales ──────
+## Mirrors exactly what the figure shows:
+##   Panel A (violin)  → across site-years  (all 4,651 fields × 40 years)
+##   Panel B (map)     → across sites       (40-yr mean per field)
+## Both CO2 levels reported; all scenarios vs baseline.
 {
   cat(paste(rep("═", 70), collapse = ""), "\n")
-  cat("STATS 1 — MAIN FIG 1 (all CO2 levels, all scenarios vs baseline)\n")
+  cat("STATS 1 — MAIN FIG 1: Yield change (%) vs baseline\n")
   cat(paste(rep("─", 70), collapse = ""), "\n")
 
-  ## ── §3.1: Temperature and CO2 impacts (no adaptation) ──────────────────────
-  cat("\n§3.1  Climate change without adaptation (CO2 = 350 ppm)\n\n")
+  bl_sy <- simulated0 %>%
+    filter(scenario == "baseline") %>%
+    select(x, y, date, yield_bl = Yield_kgha)
 
-  bl     <- simulated0 %>% filter(scenario == "baseline")
-  cc     <- simulated0 %>% filter(scenario == "climate_change", co2 == 350)
-  cc_co2 <- simulated0 %>% filter(scenario == "climate_change", co2 == 540)
+  ## All scenarios × CO2 joined to baseline at site-year level
+  fig1_sy <- simulated0 %>%
+    filter(scenario != "baseline") %>%
+    left_join(bl_sy, by = c("x", "y", "date")) %>%
+    mutate(pct_chg = (Yield_kgha - yield_bl) / yield_bl * 100,
+           scenario = factor(scenario, levels = scenario_levels,
+                             labels = scenario_labels_long))
 
-  bl_sy  <- bl %>% select(x, y, date, yield_bl = Yield_kgha)
-  cc_sy  <- cc %>% left_join(bl_sy, by = c("x","y","date")) %>%
-                   mutate(pct = (Yield_kgha - yield_bl) / yield_bl * 100)
-  cc2_sy <- cc_co2 %>% left_join(bl_sy, by = c("x","y","date")) %>%
-                       mutate(pct = (Yield_kgha - yield_bl) / yield_bl * 100)
+  ## Across sites: 40-yr mean per field (= what map shows)
+  fig1_sites <- fig1_sy %>%
+    group_by(x, y, scenario, co2) %>%
+    summarise(pct_chg = mean(pct_chg, na.rm = TRUE), .groups = "drop")
 
-  cat(sprintf("  2°C mean yield change:  %+.1f%%  (range: %.1f%% to %+.1f%%)\n",
-              mean(cc_sy$pct,  na.rm=TRUE),
-              min(cc_sy$pct,   na.rm=TRUE),
-              max(cc_sy$pct,   na.rm=TRUE)))
-  cat(sprintf("  Baseline median yield:  %.0f kg/ha\n",
-              median(bl$Yield_kgha, na.rm=TRUE)))
-  cat(sprintf("  Baseline yield range:   %.0f – %.0f kg/ha\n",
-              min(bl$Yield_kgha, na.rm=TRUE), max(bl$Yield_kgha, na.rm=TRUE)))
+  smry <- function(df, grp) {
+    df %>% group_by(across(all_of(grp))) %>%
+      summarise(
+        mean    = round(mean(pct_chg,                    na.rm = TRUE), 1),
+        median  = round(median(pct_chg,                  na.rm = TRUE), 1),
+        q1      = round(quantile(pct_chg, 0.25,          na.rm = TRUE), 1),
+        q3      = round(quantile(pct_chg, 0.75,          na.rm = TRUE), 1),
+        min     = round(min(pct_chg,                     na.rm = TRUE), 1),
+        max     = round(max(pct_chg,                     na.rm = TRUE), 1),
+        pct_pos = round(mean(pct_chg > 0,                na.rm = TRUE) * 100, 1),
+        .groups = "drop")
+  }
 
-  ## Temperature slope (kg/ha per °C) under 2°C scenario
-  lm_all  <- lm(Yield_kgha ~ SeasonMeanT, data = cc)
-  sl_all  <- coef(lm_all)["SeasonMeanT"]
-  sl_pct  <- sl_all / mean(cc$Yield_kgha, na.rm=TRUE) * 100
-  rain_mu <- mean(cc$SeasonRain, na.rm=TRUE)
-  t_mu    <- mean(cc$SeasonMeanT, na.rm=TRUE)
-  cc_wd   <- cc %>% filter(SeasonMeanT > t_mu, SeasonRain < rain_mu)
-  sl_wd   <- coef(lm(Yield_kgha ~ SeasonMeanT, data = cc_wd))["SeasonMeanT"]
-  cat(sprintf("  Temp slope (overall):   %.0f kg/ha/°C  (%.1f%%/°C)\n", sl_all, sl_pct))
-  cat(sprintf("  Temp slope (Warm/Dry):  %.0f kg/ha/°C\n", sl_wd))
+  cat("\n── ACROSS SITES (40-yr mean per field — what map panel B shows) ──\n")
+  cat("CO2 = 350 ppm:\n")
+  smry(filter(fig1_sites, co2 == 350), "scenario") %>% print()
+  cat("CO2 = 540 ppm:\n")
+  smry(filter(fig1_sites, co2 == 540), "scenario") %>% print()
 
-  cat(sprintf("  Elev CO2 yield change:  %+.1f%%  (range: %+.1f%% to %+.1f%%)\n",
-              mean(cc2_sy$pct, na.rm=TRUE),
-              min(cc2_sy$pct,  na.rm=TRUE),
-              max(cc2_sy$pct,  na.rm=TRUE)))
+  cat("\n── ACROSS SITE-YEARS (all fields × all years — what violin panel A shows) ──\n")
+  cat("CO2 = 350 ppm:\n")
+  smry(filter(fig1_sy, co2 == 350), "scenario") %>% print()
+  cat("CO2 = 540 ppm:\n")
+  smry(filter(fig1_sy, co2 == 540), "scenario") %>% print()
 
-  ## ── §3.2: Adaptive strategies (CO2 = 350, all vs baseline) ─────────────────
-  cat("\n§3.2  Adaptive strategies (CO2 = 350 ppm, vs baseline)\n\n")
+  ## Absolute baseline context
+  bl <- simulated0 %>% filter(scenario == "baseline")
+  bl_sites <- bl %>% group_by(x, y) %>%
+    summarise(yield = mean(Yield_kgha, na.rm = TRUE), .groups = "drop")
+  cat(sprintf("\nBaseline — across sites:      median %.0f kg/ha  (range %.0f–%.0f)\n",
+              median(bl_sites$yield), min(bl_sites$yield), max(bl_sites$yield)))
+  cat(sprintf("Baseline — across site-years: mean   %.0f kg/ha  (range %.0f–%.0f)\n",
+              mean(bl$Yield_kgha, na.rm = TRUE),
+              min(bl$Yield_kgha,  na.rm = TRUE),
+              max(bl$Yield_kgha,  na.rm = TRUE)))
 
-  s350 <- simulated0 %>% filter(co2 == 350)
-  MY   <- function(sc) mean(s350$Yield_kgha[s350$scenario == sc], na.rm=TRUE)
-
-  ybl  <- MY("baseline"); ycc <- MY("climate_change")
-  ylm  <- MY("longer_mat"); yes <- MY("early_sowing"); ycmb <- MY("early_sowing_longer_mat")
-  pct  <- function(y) round(100*(y - ybl)/ybl, 1)
-
-  d_cc <- pct(ycc); d_lm <- pct(ylm); d_es <- pct(yes); d_cmb <- pct(ycmb)
-  d_add <- d_lm + d_es; d_syn <- d_cmb - d_add
-
-  cat(sprintf("  %-42s  %+5.1f%%  (%+.0f kg/ha)\n", "Baseline:", 0, 0))
-  cat(sprintf("  %-42s  %+5.1f%%  (%+.0f kg/ha)\n",
-              "2°C-increase (no adaptation):", d_cc, ycc - ybl))
-  cat(sprintf("  %-42s  %+5.1f%%  (%+.0f kg/ha)\n",
-              "Late-Maturing alone (MG5, May-22):", d_lm, ylm - ybl))
-  cat(sprintf("  %-42s  %+5.1f%%  (%+.0f kg/ha)\n",
-              "Early Sowing alone (MG4, Apr-24):", d_es, yes - ybl))
-  cat(sprintf("  %-42s  %+5.1f%%  (%+.0f kg/ha)\n",
-              "LM + ES combined (MG5, Apr-24):", d_cmb, ycmb - ybl))
-  cat(paste(rep("─", 70), collapse=""), "\n")
-  cat(sprintf("  Expected additive effect (LM + ES):       %+5.1f%%\n", d_add))
-  cat(sprintf("  Observed combined:                        %+5.1f%%\n", d_cmb))
-  cat(sprintf("  ► Synergy bonus:                          %+5.1f%%  (%.1fx additive)\n",
-              d_syn, d_cmb / d_add))
-  cat(sprintf("  ► Combined recovers %.0f%% of warming loss\n",
-              100*(ycmb - ycc) / (ybl - ycc)))
-
-  lm_fields <- s350 %>%
-    filter(scenario %in% c("baseline","longer_mat")) %>%
-    select(x,y,date,scenario,Yield_kgha) %>%
-    pivot_wider(names_from=scenario, values_from=Yield_kgha) %>%
-    mutate(pct_chg = (longer_mat - baseline)/baseline*100) %>%
-    group_by(x,y) %>% summarise(mean_chg = mean(pct_chg, na.rm=TRUE), .groups="drop")
-  cat(sprintf("\n  LM alone: %.0f%% of fields show positive yield change\n",
-              100*mean(lm_fields$mean_chg > 0, na.rm=TRUE)))
-
-  cmb_co2 <- simulated0 %>%
-    filter(scenario == "early_sowing_longer_mat", co2 == 540) %>%
-    left_join(bl_sy, by = c("x","y","date")) %>%
-    mutate(pct = (Yield_kgha - yield_bl)/yield_bl*100)
-  cat(sprintf("  LM+ES + elevated CO2: mean %+.0f%%  (range: %+.0f%% to %+.0f%%)\n",
-              mean(cmb_co2$pct, na.rm=TRUE),
-              min(cmb_co2$pct,  na.rm=TRUE),
-              max(cmb_co2$pct,  na.rm=TRUE)))
+  ## Synergy check (CO2 = 350, across sites)
+  syn <- fig1_sites %>%
+    filter(co2 == 350) %>%
+    mutate(sc = case_when(
+      scenario == "Late-Maturing"              ~ "lm",
+      scenario == "Early Sowing"               ~ "es",
+      scenario == "Late-Maturing & Early Sowing" ~ "cmb",
+      TRUE ~ "cc")) %>%
+    select(x, y, sc, pct_chg) %>%
+    pivot_wider(names_from = sc, values_from = pct_chg) %>%
+    mutate(additive = lm + es, synergy = cmb - additive)
+  cat(sprintf("\nSynergy (across sites, CO2=350):  additive %.1f%%  |  combined %.1f%%  |  bonus %.1f%%\n",
+              mean(syn$additive, na.rm=TRUE),
+              mean(syn$cmb,      na.rm=TRUE),
+              mean(syn$synergy,  na.rm=TRUE)))
 
   cat(paste(rep("═", 70), collapse = ""), "\n\n")
 }
@@ -540,105 +521,78 @@ plot9 <- plot_grid(plot9a, plot9b, ncol = 1, align = "v", axis = "lr")
 ggsave("figures/Fig2-phenology-change-maps.tiff", plot = plot9,
        width = 18, height = 18, units = "cm", dpi = 600, compression = "lzw", bg = "white")
 
-## ── STATS 2: Main Fig 2 — crop cycle and seed-filling duration changes ────────
-## Paper (§3.2): seed-filling and total crop cycle changes per scenario (CO2=350)
-## and climate_change-only stats for the "shortening" paragraph in Results
+## ── STATS 2: Main Fig 2 — phenology change statistics at two spatial scales ───
+## Mirrors exactly what the figure shows:
+##   Map (both panels) → across sites  (40-yr mean per field)
+##   Full variability  → across site-years (all fields × all years)
+## CO2 = 350 ppm only; all 4 scenarios vs baseline.
 {
   cat(paste(rep("═", 70), collapse=""), "\n")
-  cat("STATS 2 — MAIN FIG 2: Phenology changes (CO2=350, vs baseline)\n")
+  cat("STATS 2 — MAIN FIG 2: Phenology changes (days) vs baseline, CO2=350\n")
   cat(paste(rep("─", 70), collapse=""), "\n")
 
-  ## Climate change scenario only — field-level means for the crop-cycle shortening paragraph
-  p9_cc_site_years <- p9_data %>% filter(scenario == "climate_change")
+  ## site-year level data (already computed above as p9_data)
+  ph_sy <- p9_data %>%
+    mutate(scenario = factor(scenario, levels = scenario_levels,
+                             labels = scenario_labels))
 
-  p9_cc <- p9_cc_site_years %>%
-    group_by(x, y) %>%
-    summarise(
-      tc_chg_mean = mean(tc_chg, na.rm = TRUE),
-      sf_chg_mean = mean(sf_chg, na.rm = TRUE),
-      .groups = "drop"
-    )
+  ## Across sites: 40-yr mean per field (= what the map shows)
+  ph_sites <- ph_sy %>%
+    group_by(x, y, scenario) %>%
+    summarise(tc_chg = mean(tc_chg, na.rm = TRUE),
+              sf_chg = mean(sf_chg, na.rm = TRUE),
+              .groups = "drop")
 
-  lat_breaks <- quantile(p9_cc$y, probs = c(0, 1/3, 2/3, 1), na.rm = TRUE)
-  p9_cc <- p9_cc %>%
+  ## Helper: summary for one variable
+  ph_smry <- function(df, var) {
+    df %>% group_by(scenario) %>%
+      summarise(
+        mean    = round(mean(.data[[var]],                 na.rm = TRUE), 1),
+        median  = round(median(.data[[var]],               na.rm = TRUE), 1),
+        q1      = round(quantile(.data[[var]], 0.25,       na.rm = TRUE), 1),
+        q3      = round(quantile(.data[[var]], 0.75,       na.rm = TRUE), 1),
+        min     = round(min(.data[[var]],                  na.rm = TRUE), 1),
+        max     = round(max(.data[[var]],                  na.rm = TRUE), 1),
+        pct_pos = round(mean(.data[[var]] > 0,             na.rm = TRUE) * 100, 1),
+        .groups = "drop")
+  }
+
+  cat("\n── ACROSS SITES (40-yr mean per field — what the maps show) ──\n")
+  cat("Total crop-cycle change vs baseline (days):\n")
+  ph_smry(ph_sites, "tc_chg") %>% print()
+  cat("\nSeed-filling duration change vs baseline (days):\n")
+  ph_smry(ph_sites, "sf_chg") %>% print()
+
+  cat("\n── ACROSS SITE-YEARS (all fields × all years — full variability) ──\n")
+  cat("Total crop-cycle change vs baseline (days):\n")
+  ph_smry(ph_sy, "tc_chg") %>% print()
+  cat("\nSeed-filling duration change vs baseline (days):\n")
+  ph_smry(ph_sy, "sf_chg") %>% print()
+
+  ## Absolute baseline durations for context
+  bl_ph <- simulated0 %>%
+    filter(scenario == "baseline", co2 == 350) %>%
+    mutate(sf_dur = MaturityDAS - SeedFillingDAS,
+           tc_dur = MaturityDAS - EmergenceDAS)
+  bl_ph_sites <- bl_ph %>% group_by(x, y) %>%
+    summarise(sf = mean(sf_dur, na.rm=TRUE), tc = mean(tc_dur, na.rm=TRUE), .groups="drop")
+  cat(sprintf("\nBaseline durations — across sites:      sf %.1f days | tc %.1f days\n",
+              mean(bl_ph_sites$sf), mean(bl_ph_sites$tc)))
+  cat(sprintf("Baseline durations — across site-years: sf %.1f days | tc %.1f days\n",
+              mean(bl_ph$sf_dur, na.rm=TRUE), mean(bl_ph$tc_dur, na.rm=TRUE)))
+
+  ## Seed-filling change by latitude zone (across sites, climate_change only)
+  cc_sites <- ph_sites %>% filter(scenario == "2°C-increase")
+  lat_breaks <- quantile(cc_sites$y, probs = c(0, 1/3, 2/3, 1), na.rm = TRUE)
+  cat("\nSeed-filling change (2°C-increase) by latitude zone — across sites:\n")
+  cc_sites %>%
     mutate(lat_zone = cut(y, breaks = lat_breaks, include.lowest = TRUE,
-                          labels = c("South", "Central", "North")))
-
-  cat("\nTOTAL CROP CYCLE — climate_change vs baseline:\n")
-  cat(sprintf("  Fields with shorter cycle: %d of %d (%.0f%%)\n",
-              sum(p9_cc$tc_chg_mean < 0, na.rm = TRUE),
-              nrow(p9_cc),
-              mean(p9_cc$tc_chg_mean < 0, na.rm = TRUE) * 100))
-  cat(sprintf("  Max shortening : %.1f days (%.1f weeks)\n",
-              min(p9_cc_site_years$tc_chg, na.rm = TRUE),
-              min(p9_cc_site_years$tc_chg, na.rm = TRUE) / 7))
-  cat(sprintf("  Max lengthening: %.1f days\n",
-              max(p9_cc_site_years$tc_chg, na.rm = TRUE)))
-  cat(sprintf("  Mean           : %.1f days\n",
-              mean(p9_cc_site_years$tc_chg, na.rm = TRUE)))
-
-  cat("\nSEED-FILLING — climate_change vs baseline (all site-years):\n")
-  cat(sprintf("  Max shortening : %.1f days\n",
-              min(p9_cc_site_years$sf_chg, na.rm = TRUE)))
-  cat(sprintf("  Max lengthening: %.1f days\n",
-              max(p9_cc_site_years$sf_chg, na.rm = TRUE)))
-  cat(sprintf("  Mean           : %.1f days\n",
-              mean(p9_cc_site_years$sf_chg, na.rm = TRUE)))
-  cat(sprintf("  Site-years with shorter seed-fill: %.0f%%\n",
-              mean(p9_cc_site_years$sf_chg < 0, na.rm = TRUE) * 100))
-
-  cat("\nSEED-FILLING CHANGE by latitude zone (field means):\n")
-  p9_cc %>%
+                          labels = c("South", "Central", "North"))) %>%
     group_by(lat_zone) %>%
-    summarise(
-      n_fields     = n(),
-      mean_sf_chg  = round(mean(sf_chg_mean, na.rm = TRUE), 1),
-      pct_negative = round(mean(sf_chg_mean < 0, na.rm = TRUE) * 100, 1),
-      .groups = "drop"
-    ) %>% print()
-
-  ## All adaptation scenarios — phenology changes vs baseline
-  s350 <- simulated0 %>% filter(co2 == 350)
-  bl_ph <- s350 %>% filter(scenario == "baseline") %>%
-    select(x, y, date,
-           sf_bl  = SeedFillingDAS, mat_bl = MaturityDAS, emg_bl = EmergenceDAS)
-
-  ph_data <- s350 %>%
-    filter(scenario %in% c("climate_change","longer_mat","early_sowing",
-                           "early_sowing_longer_mat")) %>%
-    select(x, y, date, scenario, SeedFillingDAS, MaturityDAS, EmergenceDAS) %>%
-    left_join(bl_ph, by = c("x","y","date")) %>%
-    mutate(
-      sf_dur    = MaturityDAS - SeedFillingDAS,
-      sf_dur_bl = mat_bl     - sf_bl,
-      tc_dur    = MaturityDAS - EmergenceDAS,
-      tc_dur_bl = mat_bl     - emg_bl,
-      sf_chg    = sf_dur - sf_dur_bl,
-      tc_chg    = tc_dur - tc_dur_bl
-    )
-
-  cat("\nTotal crop-cycle change vs baseline (days, mean ± sd):\n")
-  ph_data %>% group_by(scenario) %>%
-    summarise(mean = round(mean(tc_chg, na.rm=TRUE), 1),
-              sd   = round(sd(tc_chg,   na.rm=TRUE), 1),
-              min  = round(min(tc_chg,   na.rm=TRUE), 1),
-              max  = round(max(tc_chg,   na.rm=TRUE), 1), .groups="drop") %>%
-    print()
-
-  cat("\nSeed-filling duration change vs baseline (days, mean ± sd):\n")
-  ph_data %>% group_by(scenario) %>%
-    summarise(mean = round(mean(sf_chg, na.rm=TRUE), 1),
-              sd   = round(sd(sf_chg,   na.rm=TRUE), 1),
-              min  = round(min(sf_chg,   na.rm=TRUE), 1),
-              max  = round(max(sf_chg,   na.rm=TRUE), 1), .groups="drop") %>%
-    print()
-
-  cat("\nAbsolute durations (days, mean across all site-years):\n")
-  cat(sprintf("  Baseline seed-filling: %.1f days | crop cycle: %.1f days\n",
-      mean(ph_data$sf_dur_bl, na.rm=TRUE), mean(ph_data$tc_dur_bl, na.rm=TRUE)))
-  ph_data %>% group_by(scenario) %>%
-    summarise(sf = round(mean(sf_dur, na.rm=TRUE), 1),
-              tc = round(mean(tc_dur, na.rm=TRUE), 1), .groups="drop") %>%
+    summarise(n        = n(),
+              mean_sf  = round(mean(sf_chg, na.rm=TRUE), 1),
+              pct_neg  = round(mean(sf_chg < 0, na.rm=TRUE) * 100, 1),
+              .groups  = "drop") %>%
     print()
 
   cat(paste(rep("═", 70), collapse=""), "\n\n")

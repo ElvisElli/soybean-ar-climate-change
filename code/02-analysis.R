@@ -232,7 +232,7 @@ plot5_merged <- plot_grid(
   labels = "AUTO", rel_widths = c(0.8, 1)
 )
 
-ggsave("figures/fig05 - adaptation strategies merged.tiff", plot = plot5_merged,
+ggsave("figures/Fig1-yield-adaptation-strategies.tiff", plot = plot5_merged,
        width = 30, height = 15, units = "cm", dpi = 600, compression = "lzw", bg = "white")
 
 ## ── STATS 1: Main Fig 1 — all cited numbers for Results §3.1 and §3.2 ────────
@@ -526,7 +526,7 @@ plot9b <- make_pheno_map(p9_data, "sf_chg",
 
 plot9 <- plot_grid(plot9a, plot9b, ncol = 1, align = "v", axis = "lr")
 
-ggsave("figures/fig09 - phenology change maps.tiff", plot = plot9,
+ggsave("figures/Fig2-phenology-change-maps.tiff", plot = plot9,
        width = 18, height = 18, units = "cm", dpi = 600, compression = "lzw", bg = "white")
 
 ## ── STATS 2: Main Fig 2 — crop cycle and seed-filling duration changes ────────
@@ -702,16 +702,268 @@ plot6 <- p6_weather %>%
                                "Normal" = "#d95f0e")) +
   guides(fill = guide_legend(override.aes = list(alpha = 1, size = 4, shape = 21)))
 
-ggsave("figures/fig06 - environmental characterization.tiff", plot = plot6,
+ggsave("figures/FigS3-environmental-characterization.tiff", plot = plot6,
        width = 20, height = 15, units = "cm", dpi = 600, compression = "lzw", bg = "white")
 
 
 ## ── SUPP FIG S4: Soybean sowing progress in Arkansas ────────────────────── ----
 ## Paper: Figure S4 — "USDA-NASS soybean sowing progress in Arkansas 1990–2025.
-##        Grey lines represent historical years; green thicker line is the average."
-## Generates: figures/fig_progress_all.tiff and figures/fig_progress_recent.tiff
+##        Grey lines represent historical years; green thicker line is the average.
+##        50% and 10% average sowing progress are annotated."
+## Figures: FigS4-sowing-progress-all-years.tiff
+##          FigS4-sowing-progress-recent-5yr.tiff
 
-source("code/utils/sowing-progress.R")
+suppressPackageStartupMessages({
+  library(purrr)
+  library(broom)
+  library(readxl)
+  library(httr)
+  library(jsonlite)
+})
+
+## ── S4 Settings ──────────────────────────────────────────────────────────────
+NASS_API_KEY  <- "D228A372-93ED-3BF7-9699-D2D0DDD3C88D"
+FALLBACK_FILE <- "data/raw/progress.xlsx"
+CACHE_FILE    <- "data/raw/nass-progress-cache.rds"
+YEAR_MIN      <- 1990
+YEAR_MAX      <- as.integer(format(Sys.Date(), "%Y")) - 1L
+N_RECENT      <- 5
+RECENT_COL    <- "#31a354"
+AVG_COL       <- "#00BF7D"
+
+## ── S4 Step 1: Download or load data ─────────────────────────────────────────
+download_nass_progress <- function(api_key) {
+  message("[Progress] Downloading from USDA-NASS Quick Stats API...")
+  resp <- tryCatch(
+    GET("https://quickstats.nass.usda.gov/api/api_GET/",
+        query   = list(key               = api_key,
+                       commodity_desc    = "SOYBEANS",
+                       statisticcat_desc = "PROGRESS",
+                       unit_desc         = "PCT PLANTED",
+                       state_alpha       = "AR",
+                       freq_desc         = "WEEKLY",
+                       format            = "JSON"),
+        timeout(30)),
+    error = function(e) { message("[Progress] API error: ", e$message); NULL }
+  )
+  if (is.null(resp) || http_error(resp)) {
+    message("[Progress] API status: ", if (!is.null(resp)) status_code(resp) else "N/A")
+    return(NULL)
+  }
+  j <- tryCatch(fromJSON(content(resp, "text", encoding = "UTF-8")), error = function(e) NULL)
+  if (is.null(j) || is.null(j$data) || nrow(j$data) == 0) {
+    message("[Progress] API returned empty data."); return(NULL)
+  }
+  df <- as.data.frame(j$data) %>%
+    transmute(
+      year  = as.integer(year),
+      week  = as.Date(week_ending),
+      DOY   = as.integer(strftime(week, "%j")),
+      value = suppressWarnings(as.numeric(Value)) / 100
+    ) %>%
+    filter(!is.na(value), !is.na(DOY), year >= YEAR_MIN, year <= YEAR_MAX)
+  message(sprintf("[Progress] Downloaded %d records (%d–%d).",
+                  nrow(df), min(df$year), max(df$year)))
+  df
+}
+
+nass_progress <- download_nass_progress(NASS_API_KEY)
+
+if (!is.null(nass_progress)) {
+  saveRDS(nass_progress, CACHE_FILE)
+} else if (file.exists(CACHE_FILE)) {
+  nass_progress <- readRDS(CACHE_FILE)
+  message(sprintf("[Progress] Loaded from cache (%d–%d).",
+                  min(nass_progress$year), max(nass_progress$year)))
+} else {
+  message("[Progress] Loading from ", FALLBACK_FILE)
+  raw <- read_excel(FALLBACK_FILE)
+  names(raw) <- gsub(" ", "_", toupper(trimws(names(raw))))
+  nass_progress <- raw %>%
+    filter(grepl("PLANTED",  DATA_ITEM, ignore.case = TRUE),
+           grepl("SOYBEANS", DATA_ITEM, ignore.case = TRUE),
+           YEAR >= YEAR_MIN, YEAR <= YEAR_MAX) %>%
+    transmute(year  = as.integer(YEAR),
+              week  = as.Date(WEEK_ENDING),
+              DOY   = as.integer(strftime(week, "%j")),
+              value = VALUE / 100) %>%
+    filter(!is.na(value), !is.na(DOY))
+}
+
+cat(sprintf("[Progress] %d records | %d years (%d–%d)\n",
+            nrow(nass_progress), n_distinct(nass_progress$year),
+            min(nass_progress$year), max(nass_progress$year)))
+
+## ── S4 Step 2: Fit logistic model per year ───────────────────────────────────
+fit_logistic_progress <- function(df) {
+  tryCatch(
+    nls(value ~ 1 / (1 + exp(-b * (DOY - c))),
+        data = df, start = list(b = 0.10, c = 135)),
+    error = function(e) NULL
+  )
+}
+
+doy_at_pct <- function(b, c, pct) c - log(100 / pct - 1) / b
+
+progress_models <- nass_progress %>%
+  group_by(year) %>%
+  nest() %>%
+  mutate(model  = map(data, fit_logistic_progress),
+         failed = map_lgl(model, is.null))
+
+n_prog_failed <- sum(progress_models$failed)
+if (n_prog_failed > 0)
+  message(sprintf("[Progress] %d year(s) did not converge and are excluded.", n_prog_failed))
+
+params_df <- progress_models %>%
+  filter(!failed) %>%
+  mutate(b      = map_dbl(model, ~ coef(.x)["b"]),
+         c      = map_dbl(model, ~ coef(.x)["c"]),
+         doy_10 = map2_dbl(b, c, ~ doy_at_pct(.x, .y, 10)),
+         doy_50 = map2_dbl(b, c, ~ doy_at_pct(.x, .y, 50))) %>%
+  select(year, b, c, doy_10, doy_50)
+
+DOY_seq <- 95:175
+
+pred_curves <- params_df %>%
+  mutate(pred = map2(b, c, ~ data.frame(
+    DOY      = DOY_seq,
+    progress = 100 / (1 + exp(-.x * (DOY_seq - .y)))
+  ))) %>%
+  select(year, doy_10, doy_50, pred) %>%
+  unnest(pred)
+
+avg_curve  <- pred_curves %>%
+  group_by(DOY) %>%
+  summarise(progress = mean(progress, na.rm = TRUE), .groups = "drop")
+
+avg_doy_10 <- mean(params_df$doy_10, na.rm = TRUE)
+avg_doy_50 <- mean(params_df$doy_50, na.rm = TRUE)
+
+cat(sprintf("[Progress] Avg DOY at 10%% planted: %.1f (~%s)\n", avg_doy_10,
+            format(as.Date(paste0("2023-", round(avg_doy_10)), "%Y-%j"), "%b %d")))
+cat(sprintf("[Progress] Avg DOY at 50%% planted: %.1f (~%s)\n", avg_doy_50,
+            format(as.Date(paste0("2023-", round(avg_doy_50)), "%Y-%j"), "%b %d")))
+
+## ── S4 Shared axis settings ───────────────────────────────────────────────────
+doy_breaks <- c(100, 110, 120, 130, 140, 150, 160, 170)
+doy_labels <- c("100\n(Apr 10)", "110\n(Apr 20)", "120\n(Apr 30)",
+                "130\n(May 10)", "140\n(May 20)", "150\n(May 30)",
+                "160\n(Jun 9)",  "170\n(Jun 19)")
+
+## ── S4 Figure (all years): all years + average, 10% and 50% annotated ────────
+all_10_text_x <- 100;  all_10_text_y <- 50
+all_50_text_x <- 100;  all_50_text_y <- 72
+
+plot_progress_all <- ggplot() +
+  geom_line(data = pred_curves,
+            aes(x = DOY, y = progress, group = year),
+            colour = "grey70", linewidth = 0.55, alpha = 0.7) +
+  geom_line(data = avg_curve, aes(x = DOY, y = progress),
+            colour = AVG_COL, linewidth = 1.5) +
+  annotate("segment",
+           x = all_10_text_x + 7, y = all_10_text_y - 3,
+           xend = avg_doy_10, yend = 14,
+           arrow = arrow(length = unit(0.13, "cm"), type = "closed"),
+           colour = "black", linewidth = 0.45) +
+  annotate("segment",
+           x = all_50_text_x + 17, y = all_50_text_y - 3,
+           xend = avg_doy_50, yend = 51,
+           arrow = arrow(length = unit(0.13, "cm"), type = "closed"),
+           colour = "black", linewidth = 0.45) +
+  annotate("text", x = all_10_text_x, y = all_10_text_y,
+           label = sprintf("10%% planted\nDOY %.0f (%s)", avg_doy_10,
+                           format(as.Date(paste0("2023-", round(avg_doy_10)), "%Y-%j"), "%b %d")),
+           hjust = 0, size = 2.9, colour = "black", lineheight = 0.95) +
+  annotate("text", x = all_50_text_x, y = all_50_text_y,
+           label = sprintf("50%% planted\nDOY %.0f (%s)", avg_doy_50,
+                           format(as.Date(paste0("2023-", round(avg_doy_50)), "%Y-%j"), "%b %d")),
+           hjust = 0, size = 2.9, colour = "black", lineheight = 0.95) +
+  temp +
+  theme(panel.background = element_rect(fill = "white"),
+        panel.grid.major = element_line(colour = "grey90"),
+        axis.text.x = element_text(angle = 35, hjust = 1)) +
+  scale_x_continuous(name = "Day of year", breaks = doy_breaks, labels = doy_labels,
+                     expand = expansion(mult = c(0.02, 0.05))) +
+  scale_y_continuous(name = "Soybean planting progress (%)",
+                     limits = c(0, 100), breaks = seq(0, 100, 20))
+
+ggsave("figures/FigS4-sowing-progress-all-years.tiff", plot = plot_progress_all,
+       width = 14, height = 14, units = "cm",
+       dpi = 600, compression = "lzw", bg = "white")
+cat("[Progress] Saved: figures/FigS4-sowing-progress-all-years.tiff\n")
+
+## ── S4 Figure (recent 5 years): last 5 years + 5-yr average ─────────────────
+recent_years <- sort(unique(params_df$year), decreasing = TRUE)[seq_len(N_RECENT)]
+
+pred_bg     <- filter(pred_curves, !year %in% recent_years)
+pred_recent <- filter(pred_curves,  year %in% recent_years)
+
+avg5_b      <- mean(filter(params_df, year %in% recent_years)$b)
+avg5_c      <- mean(filter(params_df, year %in% recent_years)$c)
+avg5_doy_10 <- doy_at_pct(avg5_b, avg5_c, 10)
+avg5_doy_50 <- doy_at_pct(avg5_b, avg5_c, 50)
+avg5_curve  <- data.frame(DOY      = DOY_seq,
+                          progress = 100 / (1 + exp(-avg5_b * (DOY_seq - avg5_c))))
+
+arr_10_text_x <- avg5_doy_10 + 10;  arr_10_text_y <- 25
+arr_50_text_x <- avg5_doy_50 + 5;   arr_50_text_y <- 63
+
+plot_progress_recent <- ggplot() +
+  geom_line(data = pred_bg,
+            aes(x = DOY, y = progress, group = year),
+            colour = "grey75", linewidth = 0.3, alpha = 0.6) +
+  geom_line(data = pred_recent,
+            aes(x = DOY, y = progress, group = year),
+            colour = RECENT_COL, linewidth = 0.45, alpha = 0.7) +
+  geom_line(data = avg5_curve, aes(x = DOY, y = progress),
+            colour = RECENT_COL, linewidth = 2.0) +
+  geom_hline(yintercept = c(10, 50), linetype = "dashed",
+             colour = "grey40", linewidth = 0.4) +
+  annotate("segment",
+           x = arr_10_text_x, y = arr_10_text_y - 3,
+           xend = avg5_doy_10 + 1, yend = 11,
+           arrow = arrow(length = unit(0.13, "cm"), type = "closed"),
+           colour = "black", linewidth = 0.45) +
+  annotate("segment",
+           x = arr_50_text_x, y = arr_50_text_y - 3,
+           xend = avg5_doy_50 + 1, yend = 51,
+           arrow = arrow(length = unit(0.13, "cm"), type = "closed"),
+           colour = "black", linewidth = 0.45) +
+  annotate("text",
+           x = arr_10_text_x, y = arr_10_text_y,
+           label = sprintf("10%% planted\nDOY %.0f (%s)", avg5_doy_10,
+                           format(as.Date(paste0("2023-", round(avg5_doy_10)), "%Y-%j"), "%b %d")),
+           hjust = 0, size = 2.9, colour = "black", lineheight = 0.95) +
+  annotate("text",
+           x = arr_50_text_x, y = arr_50_text_y,
+           label = sprintf("50%% planted\nDOY %.0f (%s)", avg5_doy_50,
+                           format(as.Date(paste0("2023-", round(avg5_doy_50)), "%Y-%j"), "%b %d")),
+           hjust = 0, size = 2.9, colour = "black", lineheight = 0.95) +
+  temp +
+  theme(panel.background = element_rect(fill = "white"),
+        panel.grid.major = element_line(colour = "grey90"),
+        axis.text.x = element_text(angle = 35, hjust = 1)) +
+  scale_x_continuous(name = "Day of year", breaks = doy_breaks, labels = doy_labels,
+                     expand = expansion(mult = c(0.02, 0.05))) +
+  scale_y_continuous(name = "Soybean planting progress (%)",
+                     limits = c(0, 100), breaks = seq(0, 100, 20))
+
+ggsave("figures/FigS4-sowing-progress-recent-5yr.tiff", plot = plot_progress_recent,
+       width = 16, height = 11, units = "cm",
+       dpi = 600, compression = "lzw", bg = "white")
+cat("[Progress] Saved: figures/FigS4-sowing-progress-recent-5yr.tiff\n")
+
+cat(sprintf("\n── Per-year 50%% and 10%% planting DOY (%d–%d) ──\n",
+            min(params_df$year), max(params_df$year)))
+params_df %>%
+  transmute(year,
+            doy_10 = round(doy_10, 1),
+            date_10 = format(as.Date(paste0(year, "-", round(doy_10)), "%Y-%j"), "%b %d"),
+            doy_50 = round(doy_50, 1),
+            date_50 = format(as.Date(paste0(year, "-", round(doy_50)), "%Y-%j"), "%b %d")) %>%
+  arrange(desc(year)) %>%
+  print(n = Inf)
 
 
 ## ── SUPP FIG S5: Yield density + spatial map (climate change without adapt.) ── ----
@@ -768,7 +1020,7 @@ plot1b <- ggplot() +
 plot1 <- plot_grid(plot1a, plot1b, ncol = 1, align = "v", axis = "r",
                    labels = "AUTO", rel_heights = c(0.4, 1))
 
-ggsave("figures/fig01 - climate change without adaptation.tiff", plot = plot1,
+ggsave("figures/FigS5-yield-density-no-adaptation.tiff", plot = plot1,
        width = 20, height = 15, units = "cm", dpi = 600, compression = "lzw", bg = "white")
 
 ## ── STATS S5: Supp Fig S5 — baseline yield distribution ──────────────────────
@@ -855,7 +1107,7 @@ plot2 <- p2_data %>%
            size = 4, colour = "#008837") +
   guides(linetype = "none")
 
-ggsave("figures/fig02 - temperature impacts.tiff", plot = plot2,
+ggsave("figures/FigS6-temperature-yield-scatter.tiff", plot = plot2,
        width = 15, height = 12, units = "cm", dpi = 600, compression = "lzw", bg = "white")
 
 ## ── STATS S6: Supp Fig S6 — temperature–yield regression ─────────────────────
@@ -934,7 +1186,7 @@ plot3 <- ggplot(p3_data,
   theme(legend.position = "top", axis.text.x = element_text(angle = 30, hjust = 1)) +
   scale_y_continuous(breaks = seq(-20, 40, 10), limits = c(-20, 40))
 
-ggsave("figures/fig03 - adaptation strategies summary.tiff", plot = plot3,
+ggsave("figures/Additional-fig3-yield-change-violin.tiff", plot = plot3,
        width = 15, height = 15, units = "cm", dpi = 600, compression = "lzw", bg = "white")
 
 
@@ -986,7 +1238,7 @@ plot4 <- ggplot() +
     name = "Yield change (%)") +
   map_theme
 
-ggsave("figures/fig04 - adaptation strategies map.tiff", plot = plot4,
+ggsave("figures/Additional-fig4-yield-change-map.tiff", plot = plot4,
        width = 15, height = 15, units = "cm", dpi = 600, compression = "lzw", bg = "white")
 
 
@@ -1009,7 +1261,7 @@ plot7 <- p7_data %>%
   coord_cartesian(clip = "off") +
   theme(legend.position = "top")
 
-ggsave("figures/fig07 - seed filling duration.tiff", plot = plot7,
+ggsave("figures/Additional-fig7-seed-filling-duration.tiff", plot = plot7,
        width = 18, height = 14, units = "cm", dpi = 600, compression = "lzw", bg = "white")
 
 
@@ -1031,7 +1283,7 @@ plot8 <- p8_data %>%
   labs(x = "Days after sowing", y = element_blank()) +
   theme(legend.position = "none", axis.text.y = element_text(size = 10))
 
-ggsave("figures/fig08 - phenology timeline by scenario.tiff", plot = plot8,
+ggsave("figures/Additional-fig8-phenology-timeline.tiff", plot = plot8,
        width = 22, height = 14, units = "cm", dpi = 600, compression = "lzw", bg = "white")
 
 
@@ -1050,7 +1302,7 @@ save_wue_map <- function(var, label, df_stars, counties) {
     theme(axis.title = element_blank(), axis.text = element_blank(),
           legend.position = "left", legend.direction = "vertical",
           legend.title = element_text(size = 12))
-  ggsave(paste0("figures/fig10 - water use efficiency - ", var, ".tiff"), plot = p,
+  ggsave(paste0("figures/Additional-fig10-water-use-efficiency-", var, ".tiff"), plot = p,
          width = 30, height = 10, units = "cm", dpi = 600,
          compression = "lzw", bg = "white")
   invisible(p)

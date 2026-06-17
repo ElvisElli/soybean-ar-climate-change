@@ -200,10 +200,10 @@ plot_all <- ggplot() +
   scale_y_continuous(name = "Soybean planting progress (%)",
                      limits = c(0, 100), breaks = seq(0, 100, 20))
 
-ggsave("figures/fig_progress_all.tiff", plot = plot_all,
+ggsave("figures/FigS4-sowing-progress-all-years.tiff", plot = plot_all,
        width = 14, height = 14, units = "cm",
        dpi = 600, compression = "lzw", bg = "white")
-cat("[Progress] Saved: figures/fig_progress_all.tiff\n")
+cat("[Progress] Saved: figures/FigS4-sowing-progress-all-years.tiff\n")
 
 ## ── Figure 2: last 5 years (same colour) + 5-yr average, arrows + labels ────
 recent_years <- sort(unique(params_df$year), decreasing = TRUE)[seq_len(N_RECENT)]
@@ -274,10 +274,10 @@ plot_recent <- ggplot() +
   scale_y_continuous(name = "Soybean planting progress (%)",
                      limits = c(0, 100), breaks = seq(0, 100, 20))
 
-ggsave("figures/fig_progress_recent.tiff", plot = plot_recent,
+ggsave("figures/FigS4-sowing-progress-recent-5yr.tiff", plot = plot_recent,
        width = 16, height = 11, units = "cm",
        dpi = 600, compression = "lzw", bg = "white")
-cat("[Progress] Saved: figures/fig_progress_recent.tiff\n")
+cat("[Progress] Saved: figures/FigS4-sowing-progress-recent-5yr.tiff\n")
 
 ## ── Console summary ───────────────────────────────────────────────────────────
 cat(sprintf("\n── Per-year 50%% and 10%% planting DOY (%d–%d) ──\n",

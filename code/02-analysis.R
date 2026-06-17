@@ -821,7 +821,7 @@ plot9b <- make_pheno_map(p9_data, "sf_chg",
 plot9 <- plot_grid(plot9a, plot9b, ncol = 1, align = "v", axis = "lr")
 
 ggsave("figures/fig09 - phenology change maps.tiff", plot = plot9,
-       width = 28, height = 18, units = "cm", dpi = 600, compression = "lzw", bg = "white")
+       width = 18, height = 18, units = "cm", dpi = 600, compression = "lzw", bg = "white")
 
 
 ## ── Figure 10: Water-use efficiency spatial maps ──────────────────────── ----

@@ -162,27 +162,25 @@ doy_labels <- c("100\n(Apr 10)", "110\n(Apr 20)", "120\n(Apr 30)",
 
 ## ── Figure 1: all years + average, 10% and 50% annotated ────────────────────
 ## Annotations placed in empty upper-left space with arrows to curve crossings
-all_10_text_x <- 104;  all_10_text_y <- 30
-all_50_text_x <- 104;  all_50_text_y <- 72
+all_10_text_x <- 100;  all_10_text_y <- 50
+all_50_text_x <- 100;  all_50_text_y <- 72
 
 plot_all <- ggplot() +
   geom_line(data = pred_curves,
             aes(x = DOY, y = progress, group = year),
             colour = "grey70", linewidth = 0.55, alpha = 0.7) +
-  geom_hline(yintercept = c(10, 50), linetype = "dashed",
-             colour = "grey40", linewidth = 0.45) +
   geom_line(data = avg_curve, aes(x = DOY, y = progress),
             colour = AVG_COL, linewidth = 1.5) +
   ## Arrow: 10% label → average curve crossing
   annotate("segment",
-           x = all_10_text_x + 1, y = all_10_text_y - 3,
-           xend = avg_doy_10 - 1, yend = 11,
+           x = all_10_text_x + 7, y = all_10_text_y - 3,
+           xend = avg_doy_10, yend = 14,
            arrow = arrow(length = unit(0.13, "cm"), type = "closed"),
            colour = "black", linewidth = 0.45) +
   ## Arrow: 50% label → average curve crossing
   annotate("segment",
-           x = all_50_text_x + 1, y = all_50_text_y - 3,
-           xend = avg_doy_50 - 1, yend = 51,
+           x = all_50_text_x + 17, y = all_50_text_y - 3,
+           xend = avg_doy_50, yend = 51,
            arrow = arrow(length = unit(0.13, "cm"), type = "closed"),
            colour = "black", linewidth = 0.45) +
   annotate("text", x = all_10_text_x, y = all_10_text_y,
@@ -203,7 +201,7 @@ plot_all <- ggplot() +
                      limits = c(0, 100), breaks = seq(0, 100, 20))
 
 ggsave("figures/fig_progress_all.tiff", plot = plot_all,
-       width = 16, height = 11, units = "cm",
+       width = 14, height = 14, units = "cm",
        dpi = 600, compression = "lzw", bg = "white")
 cat("[Progress] Saved: figures/fig_progress_all.tiff\n")
 

@@ -17,7 +17,11 @@
 ##   Fig S6 → fig02  temperature–yield scatter
 ##
 ##  ADDITIONAL / DIAGNOSTIC (not in current paper)
-##   fig03, fig04, fig07, fig08, fig10
+##   ExtraFig1 → yield change by scenario (violin)
+##   ExtraFig2 → yield change spatial map
+##   ExtraFig3 → seed-filling duration distribution
+##   ExtraFig4 → phenology timeline by stage
+##   ExtraFig5 → water-use efficiency spatial maps
 ## ============================================================
 
 ## ── 0. Setup ─────────────────────────────────────────────────────────────────
@@ -1135,7 +1139,7 @@ ggsave("figures/FigS6-temperature-yield-scatter.tiff", plot = plot2,
 ## (may support reviewer responses or future manuscript sections)
 ## ══════════════════════════════════════════════════════════════════════════════
 
-## ── ADDITIONAL Fig 3: Adaptation strategies — violin (CO2 comparison) ──────── ----
+## ── ExtraFig 1: Yield change by scenario — violin (CO2 comparison) ──────── ----
 ## Half-violin + half-boxplot of yield change (%) vs baseline
 ## All 4 adaptation scenarios × CO2 level
 
@@ -1186,11 +1190,11 @@ plot3 <- ggplot(p3_data,
   theme(legend.position = "top", axis.text.x = element_text(angle = 30, hjust = 1)) +
   scale_y_continuous(breaks = seq(-20, 40, 10), limits = c(-20, 40))
 
-ggsave("figures/Additional-fig3-yield-change-violin.tiff", plot = plot3,
+ggsave("figures/ExtraFig1-yield-change-by-scenario.tiff", plot = plot3,
        width = 15, height = 15, units = "cm", dpi = 600, compression = "lzw", bg = "white")
 
 
-## ── ADDITIONAL Fig 4: Adaptation strategies — spatial yield change map ──────── ----
+## ── ExtraFig 2: Yield change — spatial map (scenario × CO2) ──────── ----
 ## Mean yield change (%) vs baseline, averaged across 40 years per cell
 ## Faceted by scenario × CO2
 
@@ -1238,11 +1242,11 @@ plot4 <- ggplot() +
     name = "Yield change (%)") +
   map_theme
 
-ggsave("figures/Additional-fig4-yield-change-map.tiff", plot = plot4,
+ggsave("figures/ExtraFig2-yield-change-spatial-map.tiff", plot = plot4,
        width = 15, height = 15, units = "cm", dpi = 600, compression = "lzw", bg = "white")
 
 
-## ── ADDITIONAL Fig 7: Seed-filling duration distribution ─────────────────────── ----
+## ── ExtraFig 3: Seed-filling duration distribution ─────────────────────── ----
 ## Ridgeline density by scenario and CO2 level
 
 p7_data <- simulated0 %>%
@@ -1261,11 +1265,11 @@ plot7 <- p7_data %>%
   coord_cartesian(clip = "off") +
   theme(legend.position = "top")
 
-ggsave("figures/Additional-fig7-seed-filling-duration.tiff", plot = plot7,
+ggsave("figures/ExtraFig3-seed-filling-duration.tiff", plot = plot7,
        width = 18, height = 14, units = "cm", dpi = 600, compression = "lzw", bg = "white")
 
 
-## ── ADDITIONAL Fig 8: Phenology timeline by scenario ─────────────────────────── ----
+## ── ExtraFig 4: Phenology timeline by stage and scenario ─────────────────────────── ----
 ## Boxplot of emergence, flowering, seed-fill start, maturity (DAS)
 
 p8_data <- simulated0 %>%
@@ -1283,11 +1287,11 @@ plot8 <- p8_data %>%
   labs(x = "Days after sowing", y = element_blank()) +
   theme(legend.position = "none", axis.text.y = element_text(size = 10))
 
-ggsave("figures/Additional-fig8-phenology-timeline.tiff", plot = plot8,
+ggsave("figures/ExtraFig4-phenology-timeline-by-stage.tiff", plot = plot8,
        width = 22, height = 14, units = "cm", dpi = 600, compression = "lzw", bg = "white")
 
 
-## ── ADDITIONAL Fig 10: Water-use efficiency spatial maps ──────────────────────── ----
+## ── ExtraFig 5: Water-use efficiency spatial maps ──────────────────────── ----
 ## One TIFF per variable; CO2 = 350 only; faceted by scenario
 
 save_wue_map <- function(var, label, df_stars, counties) {
@@ -1302,7 +1306,7 @@ save_wue_map <- function(var, label, df_stars, counties) {
     theme(axis.title = element_blank(), axis.text = element_blank(),
           legend.position = "left", legend.direction = "vertical",
           legend.title = element_text(size = 12))
-  ggsave(paste0("figures/Additional-fig10-water-use-efficiency-", var, ".tiff"), plot = p,
+  ggsave(paste0("figures/ExtraFig5-water-use-efficiency-", var, ".tiff"), plot = p,
          width = 30, height = 10, units = "cm", dpi = 600,
          compression = "lzw", bg = "white")
   invisible(p)

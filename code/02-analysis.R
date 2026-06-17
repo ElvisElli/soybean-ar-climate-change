@@ -443,6 +443,50 @@ plot5_merged <- plot_grid(
 ggsave("figures/fig05 - adaptation strategies merged.tiff", plot = plot5_merged,
        width = 30, height = 15, units = "cm", dpi = 600, compression = "lzw", bg = "white")
 
+## ── Summary table: synergistic effect on yields (guides fig05 discussion) ───
+## All comparisons vs BASELINE, CO2 = 350 ppm only (no CO2 elevation).
+## Key message: individual adaptations have near-zero effect; the combination
+## delivers a large synergistic gain that more than offsets warming losses.
+{
+  syn_df <- simulated0 %>% filter(co2 == 350)
+
+  mean_yield <- function(sc)
+    mean(syn_df$Yield_kgha[syn_df$scenario == sc], na.rm = TRUE)
+
+  ybl  <- mean_yield("baseline")
+  ycc  <- mean_yield("climate_change")
+  ylm  <- mean_yield("longer_mat")
+  yes  <- mean_yield("early_sowing")
+  ycmb <- mean_yield("early_sowing_longer_mat")
+
+  pct <- function(y) round(100 * (y - ybl) / ybl, 1)
+
+  d_cc  <- pct(ycc);  d_lm <- pct(ylm)
+  d_es  <- pct(yes);  d_cmb <- pct(ycmb)
+  d_add <- d_lm + d_es          # expected if effects were purely additive
+  d_syn <- d_cmb - d_add        # true synergy bonus
+
+  cat(paste(rep("═", 65), collapse = ""), "\n")
+  cat("FIG05 — SYNERGISTIC YIELD EFFECTS (CO2 = 350 ppm, vs baseline)\n")
+  cat(paste(rep("─", 65), collapse = ""), "\n")
+  cat(sprintf("  Baseline (MG4, May-22, current climate): %.0f kg/ha\n\n", ybl))
+  cat(sprintf("  %-38s  %+5.1f%%  (%+.0f kg/ha)\n",
+              "2°C-increase (MG4, May-22, +2°C):",       d_cc,  ycc - ybl))
+  cat(sprintf("  %-38s  %+5.1f%%  (%+.0f kg/ha)\n",
+              "Late-Maturing alone (MG5, May-22, +2°C):", d_lm,  ylm - ybl))
+  cat(sprintf("  %-38s  %+5.1f%%  (%+.0f kg/ha)\n",
+              "Early Sowing alone (MG4, Apr-24, +2°C):",  d_es,  yes - ybl))
+  cat(sprintf("  %-38s  %+5.1f%%  (%+.0f kg/ha)\n",
+              "LM + ES combined (MG5, Apr-24, +2°C):",    d_cmb, ycmb - ybl))
+  cat(paste(rep("─", 65), collapse = ""), "\n")
+  cat(sprintf("  Expected additive (LM + ES):             %+5.1f%%\n", d_add))
+  cat(sprintf("  Observed combined:                       %+5.1f%%\n", d_cmb))
+  cat(sprintf("  ► Synergy bonus:                         %+5.1f%%  (%.1fx additive)\n",
+              d_syn, d_cmb / d_add))
+  cat(sprintf("  ► Warming offset: combined recovers %.0f%% of warming loss\n",
+              100 * (ycmb - ycc) / (ybl - ycc)))
+  cat(paste(rep("═", 65), collapse = ""), "\n\n")
+}
 
 ## ── Stats for section 3.2: Adaptive strategies ──────────────────────────────
 ## Compares each adaptation scenario against:

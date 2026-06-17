@@ -46,7 +46,11 @@ fetch_nass <- function(short_desc) {
   }
   j <- fromJSON(content(resp, "text", encoding = "UTF-8"))
   df <- as.data.frame(j$data)
-  message("  ", nrow(df), " county records")
+  ## Keep only the county total row — NASS Census also returns demographic
+  ## breakdowns (by sex/race of operator) under the same short_desc, which
+  ## would inflate totals if summed. "NOT SPECIFIED" is the aggregate total.
+  df <- df[df$domaincat_desc == "NOT SPECIFIED", ]
+  message("  ", nrow(df), " county records (NOT SPECIFIED domain only)")
   df
 }
 

@@ -17,10 +17,10 @@
 ##   Fig S6 → fig02  temperature–yield scatter
 ##
 ##  ADDITIONAL / DIAGNOSTIC (not in current paper)
-##   fig03, fig04, fig07, fig08, fig10, insp_*
+##   fig03, fig04, fig07, fig08, fig10
 ## ============================================================
 
-## ── 0. Setup ────────────────────────────────────────────────────────────────
+## ── 0. Setup ─────────────────────────────────────────────────────────────────
 
 suppressPackageStartupMessages({
   library(ggplot2)
@@ -54,7 +54,7 @@ simulated0 <- as_tibble(simulated0) %>%
       mutate(., PTQ = CriticalPeriodRadn / (CriticalPeriodMeanT - 10))
     else . }
 
-## ── 0b. Data inspection & quality filter ────────────────────────────────────
+## ── 0b. Data inspection & quality filter ─────────────────────────────────────
 ## Removes rows with biologically impossible phenology before any figure is made.
 ## All figures downstream use the cleaned `simulated0`.
 
@@ -150,282 +150,15 @@ map_theme <- theme(
 )
 
 
-## ── SUPP FIG S5: Yield density + spatial map (climate change without adapt.) ─
-## Paper: Figure S5 — "Density distribution of simulated soybean yields under
-##        baseline and +2°C scenarios with and without elevated CO2 (A), and
-##        geographical distribution (B)"
-## Ridgeline distribution (A) + spatial yield map (B)
-## Scenarios: Baseline / +2°C / +2°C with elevated CO2
+## ══════════════════════════════════════════════════════════════════════════════
+## MAIN MANUSCRIPT FIGURES
+## ══════════════════════════════════════════════════════════════════════════════
 
-p1_data <- simulated0 %>%
-  filter(scenario %in% c("baseline", "climate_change")) %>%
-  group_by(x, y, scenario, co2) %>%
-  summarise(Yield_kgha = mean(Yield_kgha, na.rm = TRUE), .groups = "drop") %>%
-  mutate(
-    scenario_co2 = factor(
-      paste0(scenario, co2),
-      levels = c("baseline350", "climate_change350", "climate_change540"),
-      labels = c("Baseline", "2°C-increase", "2°C-increase with CO2")
-    ),
-    yield_bin = cut(Yield_kgha,
-      breaks = c(-Inf, 2500, 3500, 4500, 5500, Inf),
-      labels = c("<2500", "2500-3500", "3500-4500", "4500-5500", ">5500"),
-      include.lowest = TRUE)
-  )
-
-summary(p1_data %>% filter(scenario_co2 == "Baseline"))
-
-plot1a <- p1_data %>%
-  mutate(scenario_co2 = factor(scenario_co2,
-    labels = c("Baseline", "2°C-increase", "2°C-increase\nwith elevated CO2"))) %>%
-  ggplot(aes(x = Yield_kgha, y = scenario_co2, colour = scenario_co2)) +
-  geom_density_ridges(scale = 0.9, fill = NA, linewidth = 1) +
-  temp +
-  labs(x = "Yield (kg/ha)", y = element_blank()) +
-  scale_colour_manual(values = c("black", "#bd0026", "#1a9850")) +
-  theme(legend.position = "none") +
-  scale_y_discrete(expand = expansion(mult = c(0, 0.4)))
-
-df_p1 <- to_stars_grid(p1_data, dims = c("x", "y", "scenario_co2"))
-plot1b <- ggplot() +
-  geom_sf(data = ark, fill = "grey30", color = "black") +
-  geom_stars(data = df_p1, aes(fill = yield_bin)) +
-  geom_sf(data = usa_counties, fill = NA, colour = "black", linewidth = 0.5) +
-  coord_sf(xlim = c(360000, 570000)) +
-  facet_wrap(~ scenario_co2, nrow = 1) +
-  temp +
-  scale_fill_manual(
-    values = c("<2500" = "#bd0026", "2500-3500" = "#e31a1c", "3500-4500" = "#fc8d59",
-               "4500-5500" = "#91cf60", ">5500" = "#1a9850"),
-    na.value = "grey50", na.translate = FALSE,
-    name = "Yield (kg/ha)") +
-  theme(axis.title = element_blank(), axis.text = element_blank(),
-        legend.position = "left", legend.direction = "vertical",
-        legend.title = element_text(size = 12))
-
-plot1 <- plot_grid(plot1a, plot1b, ncol = 1, align = "v", axis = "r",
-                   labels = "AUTO", rel_heights = c(0.4, 1))
-
-ggsave("figures/fig01 - climate change without adaptation.tiff", plot = plot1,
-       width = 20, height = 15, units = "cm", dpi = 600, compression = "lzw", bg = "white")
-
-## ── STATS S5: Supp Fig S5 — baseline yield distribution ─────────────────────
-## Paper (§3.1): "median baseline yield 4,525 kg/ha with a south-to-north
-##   gradient ranging from 2,235 to 4,981 kg/ha"
-{
-  cat(paste(rep("═", 70), collapse=""), "\n")
-  cat("STATS S4 — SUPP FIG S4: Baseline yield distribution\n")
-  cat(paste(rep("─", 70), collapse=""), "\n")
-  bl <- simulated0 %>% filter(scenario == "baseline") %>%
-        group_by(x, y) %>% summarise(yield = mean(Yield_kgha, na.rm=TRUE), .groups="drop")
-  cat(sprintf("  Median field-mean baseline yield: %.0f kg/ha\n", median(bl$yield, na.rm=TRUE)))
-  cat(sprintf("  Field-mean yield range:           %.0f – %.0f kg/ha\n",
-              min(bl$yield, na.rm=TRUE), max(bl$yield, na.rm=TRUE)))
-  cat(sprintf("  Mean baseline yield (all site-years): %.0f kg/ha\n",
-              mean(simulated0$Yield_kgha[simulated0$scenario=="baseline"], na.rm=TRUE)))
-  cat(paste(rep("═", 70), collapse=""), "\n\n")
-}
-
-## ── SUPP FIG S6: Temperature–yield scatter ──────────────────────────────── --
-## Paper: Figure S6 — "Relationship between season temperature and soybean seed
-##        yield across 40 years and 4,651 fields under +2°C scenario"
-## Yield vs season temperature under +2°C, colored by latitude
-## Separate regression lines for all data and Warm/Dry site-years
-
-p2_data <- simulated0 %>%
-  filter(scenario == "climate_change", co2 == 350) %>%
-  mutate(
-    Rain.avg    = mean(SeasonRain),
-    Meat.avg    = mean(SeasonMeanT),
-    Rain.sd     = sd(SeasonRain),
-    Meat.sd     = sd(SeasonMeanT),
-    Normal      = ifelse(
-      SeasonRain  < Rain.avg + Rain.sd  & SeasonRain  > Rain.avg - Rain.sd &
-      SeasonMeanT < Meat.avg + Meat.sd  & SeasonMeanT > Meat.avg - Meat.sd,
-      "Yes", "No"),
-    Rain.class    = ifelse(SeasonRain > Rain.avg, "Wet", "Dry"),
-    Meat_class    = ifelse(SeasonMeanT > Meat.avg, "Warm", "Cool"),
-    weather.class = factor(
-      ifelse(Normal == "Yes", "Normal", paste0(Meat_class, "/", Rain.class)),
-      levels = c("Cool/Wet", "Warm/Wet", "Normal", "Cool/Dry", "Warm/Dry"))
-  )
-
-slope_overall  <- coef(lm(Yield_kgha ~ SeasonMeanT, data = p2_data))["SeasonMeanT"]
-slope_warm_dry <- coef(lm(Yield_kgha ~ SeasonMeanT,
-  data = filter(p2_data, weather.class == "Warm/Dry")))["SeasonMeanT"]
-
-cat(sprintf("Overall slope: %.0f kg/ha/°C (%.1f%%/°C)\n",
-            slope_overall, slope_overall / mean(p2_data$Yield_kgha) * 100))
-cat(sprintf("Warm/Dry slope: %.0f kg/ha/°C\n", slope_warm_dry))
-
-min_y  <- min(p2_data$y);  mean_y <- mean(p2_data$y);  max_y <- max(p2_data$y)
-
-plot2 <- p2_data %>%
-  filter(weather.class %in% c("Cool/Wet", "Normal", "Warm/Dry")) %>%
-  ggplot(aes(x = SeasonMeanT, y = Yield_kgha)) +
-  geom_point(aes(colour = y), size = 2, alpha = 0.3) +
-  geom_smooth(method = "lm", se = FALSE, colour = "black", linewidth = 0.8) +
-  geom_smooth(data = ~ filter(., weather.class == "Warm/Dry"),
-              aes(group = weather.class), method = "lm", se = FALSE,
-              colour = "#008837", linewidth = 1.2) +
-  temp +
-  labs(x = "Season temperature (°C)", y = "Seed yield (kg/ha)") +
-  scale_y_continuous(limits = c(1000, 6300), breaks = seq(1000, 6000, 1000)) +
-  scale_x_continuous(limits = c(21, 31), breaks = seq(21, 31, 2)) +
-  scale_color_gradientn(
-    colors = c("#a50f15", "#fb6a4a", "white"),
-    values = scales::rescale(c(min_y, mean_y, max_y)),
-    breaks = c(min_y, mean_y, max_y), labels = c("33.0", "35.0", "36.5"),
-    limits = c(min_y, max_y),
-    guide  = guide_colorbar(barwidth = 1.5, barheight = 5,
-                            frame.colour = "black", frame.linewidth = 1),
-    name   = "Latitude") +
-  theme(legend.title = element_text(size = 12), legend.text = element_text(size = 12)) +
-  annotate("segment", x = 22.5, xend = 22.8, y = 5400, yend = 4650,
-           arrow = arrow(length = unit(0.25, "cm")), color = "black", linewidth = 0.5) +
-  annotate("text", x = 24.2, y = 5500,
-           label = paste0("Overall = ", round(slope_overall, 0), " kg/ha/°C"), size = 4) +
-  annotate("segment", x = 29, xend = 29, y = 1600, yend = 3600,
-           arrow = arrow(length = unit(0.25, "cm")), color = "black", linewidth = 0.5) +
-  annotate("text", x = 27.4, y = 1500,
-           label = paste0("Warm & Dry = ", round(slope_warm_dry, 0), " kg/ha/°C"),
-           size = 4, colour = "#008837") +
-  guides(linetype = "none")
-
-ggsave("figures/fig02 - temperature impacts.tiff", plot = plot2,
-       width = 15, height = 12, units = "cm", dpi = 600, compression = "lzw", bg = "white")
-
-## ── STATS S6: Supp Fig S6 — temperature–yield regression ────────────────────
-## Paper (§3.1): "decreased by 117 kg/ha for every degree increase in season
-##   temperature"; "167 kg/ha per °C under warm and dry conditions"
-## These are also printed during figure construction above (slope_overall, slope_warm_dry)
-{
-  cat(paste(rep("═", 70), collapse=""), "\n")
-  cat("STATS S5 — SUPP FIG S5: Temperature–yield regression (CO2=350, +2°C)\n")
-  cat(paste(rep("─", 70), collapse=""), "\n")
-  cc350 <- simulated0 %>% filter(scenario == "climate_change", co2 == 350)
-  sl_all <- coef(lm(Yield_kgha ~ SeasonMeanT, data = cc350))["SeasonMeanT"]
-  sl_pct <- sl_all / mean(cc350$Yield_kgha, na.rm=TRUE) * 100
-  t_mu   <- mean(cc350$SeasonMeanT, na.rm=TRUE)
-  r_mu   <- mean(cc350$SeasonRain,  na.rm=TRUE)
-  cc_wd  <- cc350 %>% filter(SeasonMeanT > t_mu, SeasonRain < r_mu)
-  sl_wd  <- coef(lm(Yield_kgha ~ SeasonMeanT, data = cc_wd))["SeasonMeanT"]
-  cat(sprintf("  Overall slope:    %.0f kg/ha/°C  (%.1f%%/°C)\n", sl_all, sl_pct))
-  cat(sprintf("  Warm/Dry slope:   %.0f kg/ha/°C\n", sl_wd))
-  cat(paste(rep("═", 70), collapse=""), "\n\n")
-}
-
-## ── ADDITIONAL FIGS (not in paper): fig03, fig04 ───────────────────────── --
-## Half-violin + half-boxplot of yield change (%) vs baseline
-## All 4 adaptation scenarios × CO2 level
-
-p3_baseline <- simulated0 %>%
-  filter(scenario == "baseline") %>%
-  select(x, y, date, baseline = Yield_kgha)
-
-p3_data <- simulated0 %>%
-  filter(scenario != "baseline") %>%
-  select(x, y, scenario, co2, date, Yield_kgha) %>%
-  pivot_wider(names_from = scenario, values_from = Yield_kgha) %>%
-  left_join(p3_baseline, by = c("x", "y", "date")) %>%
-  mutate(across(all_of(scenario_levels),
-                ~ (. - baseline) / baseline * 100)) %>%
-  select(-baseline) %>%
-  pivot_longer(cols = all_of(scenario_levels),
-               names_to = "scenario", values_to = "Yield_kgha") %>%
-  mutate(scenario = factor(scenario, levels = scenario_levels,
-                           labels = scenario_labels_long))
-
-p3_data %>%
-  group_by(co2, scenario) %>%
-  summarise(
-    median = round(median(Yield_kgha, na.rm = TRUE), 1),
-    q1     = round(quantile(Yield_kgha, 0.25, na.rm = TRUE), 1),
-    q3     = round(quantile(Yield_kgha, 0.75, na.rm = TRUE), 1),
-    .groups = "drop") %>%
-  print()
-
-plot3 <- ggplot(p3_data,
-    aes(x = factor(scenario), y = Yield_kgha,
-        fill = as.factor(co2), colour = as.factor(co2))) +
-  geom_abline(intercept = 0, slope = 0, linetype = "dashed") +
-  geom_half_violin(
-    aes(group = interaction(factor(scenario), as.factor(co2))),
-    side = "l", trim = FALSE, alpha = 0.4, colour = NA,
-    position = position_dodge(width = 0.6)) +
-  geom_half_boxplot(
-    aes(group = interaction(factor(scenario), as.factor(co2))),
-    side = "r", position = position_dodge(width = 0.6),
-    outlier.shape = NA, width = 0.5, color = "black", size = 0.5) +
-  temp +
-  scale_colour_manual(values = c("#4dac26", "#d01c8b"),
-                      label  = c("Without elevated CO2", "With elevated CO2")) +
-  scale_fill_manual(values   = c("#4dac26", "#d01c8b"),
-                    label    = c("Without elevated CO2", "With elevated CO2")) +
-  labs(x = element_blank(), y = "Yield change (%)") +
-  theme(legend.position = "top", axis.text.x = element_text(angle = 30, hjust = 1)) +
-  scale_y_continuous(breaks = seq(-20, 40, 10), limits = c(-20, 40))
-
-ggsave("figures/fig03 - adaptation strategies summary.tiff", plot = plot3,
-       width = 15, height = 15, units = "cm", dpi = 600, compression = "lzw", bg = "white")
-
-
-## ── Figure 4: Adaptation strategies — spatial yield change map ───────── ----
-## Mean yield change (%) vs baseline, averaged across 40 years per cell
-## Faceted by scenario × CO2
-
-p4_baseline <- simulated0 %>%
-  filter(scenario == "baseline") %>%
-  select(x, y, date, baseline = Yield_kgha)
-
-p4_data <- simulated0 %>%
-  filter(scenario != "baseline") %>%
-  select(x, y, scenario, co2, date, Yield_kgha) %>%
-  left_join(p4_baseline, by = c("x", "y", "date")) %>%
-  mutate(pct_change = (Yield_kgha - baseline) / baseline * 100,
-         scenario   = factor(scenario, levels = scenario_levels, labels = scenario_labels)) %>%
-  group_by(x, y, scenario, co2) %>%
-  summarise(Yield_kgha = round(mean(pct_change, na.rm = TRUE), 1), .groups = "drop") %>%
-  mutate(
-    yield_bin = cut(Yield_kgha,
-      breaks = c(-15, 0, 15, 30, 45),
-      labels = c("-15 to 0", "0 to 15", "15 to 30", "30 to 45"),
-      include.lowest = TRUE),
-    co2 = factor(as.character(co2),
-      levels = c("350", "540"),
-      labels = c("Without elevated CO2", "With elevated CO2"))
-  )
-
-p4_data %>%
-  group_by(co2, scenario) %>%
-  summarise(pct_positive = round(mean(Yield_kgha > 0, na.rm = TRUE) * 100, 1),
-            .groups = "drop") %>%
-  print()
-
-df_p4 <- to_stars_grid(p4_data, dims = c("x", "y", "scenario", "co2"))
-
-plot4 <- ggplot() +
-  geom_sf(data = ark, fill = "grey50", color = "black") +
-  geom_stars(data = df_p4, aes(fill = yield_bin)) +
-  geom_sf(data = usa_counties, fill = NA, colour = "black", linewidth = 0.5) +
-  coord_sf(xlim = c(360000, 570000)) +
-  facet_grid(co2 ~ scenario) +
-  temp +
-  scale_fill_manual(
-    values = c("-15 to 0" = "#b10026", "0 to 15" = "#e5f5f9",
-               "15 to 30" = "#99d8c9", "30 to 45" = "#2ca25f"),
-    na.value = "grey50", na.translate = FALSE,
-    name = "Yield change (%)") +
-  map_theme
-
-ggsave("figures/fig04 - adaptation strategies map.tiff", plot = plot4,
-       width = 15, height = 15, units = "cm", dpi = 600, compression = "lzw", bg = "white")
-
-
-## ── MAIN FIG 1: Adaptation strategies — merged (violin + map) ────────── ----
+## ── MAIN FIG 1: Adaptation strategies — merged (violin + map) ──────────── ----
 ## Paper: Figure 1 — "Overall relative effects of rising temperatures and
-##        adaptive strategies on soybean seed yield across 4,651 fields"
-## Combined manuscript figure (violin panel A + spatial map panel B)
+##        adaptive genotypic and agronomic management strategies on soybean
+##        seed yield across 4,651 fields (A), and geographical distribution (B)"
+## Combined manuscript figure: half-violin + boxplot (panel A) + spatial map (panel B)
 
 p5_baseline <- simulated0 %>%
   filter(scenario == "baseline") %>%
@@ -502,7 +235,7 @@ plot5_merged <- plot_grid(
 ggsave("figures/fig05 - adaptation strategies merged.tiff", plot = plot5_merged,
        width = 30, height = 15, units = "cm", dpi = 600, compression = "lzw", bg = "white")
 
-## ── STATS 1: Main Fig 1 — all cited numbers for Results §3.1 and §3.2 ───────
+## ── STATS 1: Main Fig 1 — all cited numbers for Results §3.1 and §3.2 ────────
 ## Paper cites (§3.1): "decreased yields 5.9% on average, values ranging from
 ##   -14.8% to +2.6%"; "median baseline yield 4,525 kg/ha"; "117 kg/ha per °C";
 ##   "167 kg/ha per °C under warm/dry"; "12.4% greater under combined elevated T+CO2"
@@ -517,14 +250,13 @@ ggsave("figures/fig05 - adaptation strategies merged.tiff", plot = plot5_merged,
   ## ── §3.1: Temperature and CO2 impacts (no adaptation) ──────────────────────
   cat("\n§3.1  Climate change without adaptation (CO2 = 350 ppm)\n\n")
 
-  bl  <- simulated0 %>% filter(scenario == "baseline")
-  cc  <- simulated0 %>% filter(scenario == "climate_change", co2 == 350)
+  bl     <- simulated0 %>% filter(scenario == "baseline")
+  cc     <- simulated0 %>% filter(scenario == "climate_change", co2 == 350)
   cc_co2 <- simulated0 %>% filter(scenario == "climate_change", co2 == 540)
 
-  # Yield change: climate_change vs baseline, site-year level
-  bl_sy  <- bl  %>% select(x, y, date, yield_bl = Yield_kgha)
-  cc_sy  <- cc  %>% left_join(bl_sy, by = c("x","y","date")) %>%
-                    mutate(pct = (Yield_kgha - yield_bl) / yield_bl * 100)
+  bl_sy  <- bl %>% select(x, y, date, yield_bl = Yield_kgha)
+  cc_sy  <- cc %>% left_join(bl_sy, by = c("x","y","date")) %>%
+                   mutate(pct = (Yield_kgha - yield_bl) / yield_bl * 100)
   cc2_sy <- cc_co2 %>% left_join(bl_sy, by = c("x","y","date")) %>%
                        mutate(pct = (Yield_kgha - yield_bl) / yield_bl * 100)
 
@@ -537,19 +269,17 @@ ggsave("figures/fig05 - adaptation strategies merged.tiff", plot = plot5_merged,
   cat(sprintf("  Baseline yield range:   %.0f – %.0f kg/ha\n",
               min(bl$Yield_kgha, na.rm=TRUE), max(bl$Yield_kgha, na.rm=TRUE)))
 
-  # Temperature slope (kg/ha per °C) under 2°C scenario
+  ## Temperature slope (kg/ha per °C) under 2°C scenario
   lm_all  <- lm(Yield_kgha ~ SeasonMeanT, data = cc)
   sl_all  <- coef(lm_all)["SeasonMeanT"]
   sl_pct  <- sl_all / mean(cc$Yield_kgha, na.rm=TRUE) * 100
-  # Warm/Dry subset
-  rain_mu <- mean(cc$SeasonRain, na.rm=TRUE); rain_sd <- sd(cc$SeasonRain, na.rm=TRUE)
-  t_mu    <- mean(cc$SeasonMeanT,na.rm=TRUE); t_sd    <- sd(cc$SeasonMeanT,na.rm=TRUE)
+  rain_mu <- mean(cc$SeasonRain, na.rm=TRUE)
+  t_mu    <- mean(cc$SeasonMeanT, na.rm=TRUE)
   cc_wd   <- cc %>% filter(SeasonMeanT > t_mu, SeasonRain < rain_mu)
   sl_wd   <- coef(lm(Yield_kgha ~ SeasonMeanT, data = cc_wd))["SeasonMeanT"]
   cat(sprintf("  Temp slope (overall):   %.0f kg/ha/°C  (%.1f%%/°C)\n", sl_all, sl_pct))
   cat(sprintf("  Temp slope (Warm/Dry):  %.0f kg/ha/°C\n", sl_wd))
 
-  # Elevated CO2 effect
   cat(sprintf("  Elev CO2 yield change:  %+.1f%%  (range: %+.1f%% to %+.1f%%)\n",
               mean(cc2_sy$pct, na.rm=TRUE),
               min(cc2_sy$pct,  na.rm=TRUE),
@@ -560,7 +290,6 @@ ggsave("figures/fig05 - adaptation strategies merged.tiff", plot = plot5_merged,
 
   s350 <- simulated0 %>% filter(co2 == 350)
   MY   <- function(sc) mean(s350$Yield_kgha[s350$scenario == sc], na.rm=TRUE)
-  MED  <- function(sc) median(s350$Yield_kgha[s350$scenario == sc], na.rm=TRUE)
 
   ybl  <- MY("baseline"); ycc <- MY("climate_change")
   ylm  <- MY("longer_mat"); yes <- MY("early_sowing"); ycmb <- MY("early_sowing_longer_mat")
@@ -569,8 +298,7 @@ ggsave("figures/fig05 - adaptation strategies merged.tiff", plot = plot5_merged,
   d_cc <- pct(ycc); d_lm <- pct(ylm); d_es <- pct(yes); d_cmb <- pct(ycmb)
   d_add <- d_lm + d_es; d_syn <- d_cmb - d_add
 
-  cat(sprintf("  %-42s  %+5.1f%%  (%+.0f kg/ha)\n",
-              "Baseline:", 0, 0))
+  cat(sprintf("  %-42s  %+5.1f%%  (%+.0f kg/ha)\n", "Baseline:", 0, 0))
   cat(sprintf("  %-42s  %+5.1f%%  (%+.0f kg/ha)\n",
               "2°C-increase (no adaptation):", d_cc, ycc - ybl))
   cat(sprintf("  %-42s  %+5.1f%%  (%+.0f kg/ha)\n",
@@ -587,7 +315,6 @@ ggsave("figures/fig05 - adaptation strategies merged.tiff", plot = plot5_merged,
   cat(sprintf("  ► Combined recovers %.0f%% of warming loss\n",
               100*(ycmb - ycc) / (ybl - ycc)))
 
-  # % of fields where LM alone is positive
   lm_fields <- s350 %>%
     filter(scenario %in% c("baseline","longer_mat")) %>%
     select(x,y,date,scenario,Yield_kgha) %>%
@@ -597,7 +324,6 @@ ggsave("figures/fig05 - adaptation strategies merged.tiff", plot = plot5_merged,
   cat(sprintf("\n  LM alone: %.0f%% of fields show positive yield change\n",
               100*mean(lm_fields$mean_chg > 0, na.rm=TRUE)))
 
-  # Combined + elevated CO2
   cmb_co2 <- simulated0 %>%
     filter(scenario == "early_sowing_longer_mat", co2 == 540) %>%
     left_join(bl_sy, by = c("x","y","date")) %>%
@@ -610,9 +336,9 @@ ggsave("figures/fig05 - adaptation strategies merged.tiff", plot = plot5_merged,
   cat(paste(rep("═", 70), collapse = ""), "\n\n")
 }
 
-## ── STATS 1b: §3.2 detailed field-level breakdown (CO2=350) ─────────────────
-## Supplements STATS 1 above with field-level medians, IQR, seed-fill and
-## crop-cycle durations — used for discussion paragraph precision.
+## ── STATS 1b: §3.2 detailed field-level breakdown (CO2 = 350) ────────────────
+## Supplements STATS 1 with field-level medians, IQR, seed-fill and crop-cycle
+## durations — used for discussion paragraph precision.
 ## Compares each adaptation scenario against:
 ##   (a) baseline         → overall yield recovery relative to no-warming
 ##   (b) climate_change   → incremental gain from each adaptation strategy
@@ -641,16 +367,13 @@ s32_data <- simulated0 %>%
   left_join(s32_base, by = c("x", "y", "date")) %>%
   left_join(s32_cc,   by = c("x", "y", "date")) %>%
   mutate(
-    ## Yield changes (%)
     yld_chg_vs_baseline = (Yield_kgha - yield_bl) / yield_bl * 100,
     yld_chg_vs_cc       = (Yield_kgha - yield_cc) / yield_cc * 100,
-    ## Seed-filling duration (days)
     sf_dur     = MaturityDAS - SeedFillingDAS,
     sf_dur_bl  = mat_bl      - sf_bl,
     sf_dur_cc  = mat_cc      - sf_cc,
     sf_chg_vs_baseline = sf_dur - sf_dur_bl,
     sf_chg_vs_cc       = sf_dur - sf_dur_cc,
-    ## Total cycle: emergence → maturity
     tc_dur     = MaturityDAS - EmergenceDAS,
     tc_dur_bl  = mat_bl      - emg_bl,
     tc_dur_cc  = mat_cc      - emg_cc,
@@ -658,7 +381,6 @@ s32_data <- simulated0 %>%
     tc_chg_vs_cc       = tc_dur - tc_dur_cc
   )
 
-## Field-level means (averaged across years)
 s32_fields <- s32_data %>%
   group_by(x, y, scenario) %>%
   summarise(across(c(yld_chg_vs_baseline, yld_chg_vs_cc,
@@ -670,7 +392,6 @@ s32_fields <- s32_data %>%
 cat(paste(rep("─", 65), collapse = ""), "\n")
 cat("SECTION 3.2 — ADAPTIVE STRATEGIES (CO2 = 350 ppm)\n\n")
 
-## ── Yield recovery ──────────────────────────────────────────────────────────
 cat("YIELD CHANGE vs BASELINE (field means, %):\n")
 s32_fields %>%
   group_by(scenario) %>%
@@ -695,7 +416,6 @@ s32_fields %>%
     .groups = "drop"
   ) %>% print()
 
-## ── Synergy check: combined vs sum of individual strategies ─────────────────
 cat("\nSYNERGY CHECK (combined vs sum of individual, field means):\n")
 synergy <- s32_fields %>%
   select(x, y, scenario, yld_chg_vs_cc) %>%
@@ -711,7 +431,6 @@ cat(sprintf("  Mean combined strategy            : %.1f%%\n",
 cat(sprintf("  Mean synergy effect (extra gain)  : %.1f%%\n",
             mean(synergy$synergy_effect, na.rm = TRUE)))
 
-## ── Seed-filling duration ────────────────────────────────────────────────────
 cat("\nSEED-FILLING DURATION CHANGE vs CLIMATE_CHANGE (days, field means):\n")
 s32_fields %>%
   group_by(scenario) %>%
@@ -733,7 +452,6 @@ s32_data %>%
     .groups = "drop"
   ) %>% print()
 
-## ── Total crop cycle ─────────────────────────────────────────────────────────
 cat("\nTOTAL CROP CYCLE CHANGE vs CLIMATE_CHANGE (days, field means):\n")
 s32_fields %>%
   group_by(scenario) %>%
@@ -747,125 +465,7 @@ s32_fields %>%
 cat(paste(rep("─", 65), collapse = ""), "\n\n")
 
 
-## ── SUPP FIG S3: Environmental characterization ──────────────────────── ----
-## Paper: Figure S3 — "Environmental characterization of baseline conditions
-##        across all studied site-years (A) and calendar days to flower (B)"
-## A: Weather space (temperature vs rainfall) with APSIM phenology response curve
-## B: Days to flowering by weather class, baseline vs +2°C
-
-p6_weather <- simulated0 %>%
-  filter(scenario == "baseline", co2 == 350) %>%
-  mutate(year = year(date)) %>%
-  mutate(
-    Rain.avg    = mean(SeasonRain),
-    Meat.avg    = mean(SeasonMeanT),
-    Rain.sd     = sd(SeasonRain),
-    Meat.sd     = sd(SeasonMeanT),
-    Normal      = ifelse(
-      SeasonRain  < Rain.avg + Rain.sd * 0.5 & SeasonRain  > Rain.avg - Rain.sd * 0.5 &
-      SeasonMeanT < Meat.avg + Meat.sd * 0.5 & SeasonMeanT > Meat.avg - Meat.sd * 0.5,
-      "Yes", "No"),
-    Rain.class    = ifelse(SeasonRain > Rain.avg, "Wet", "Dry"),
-    Meat_class    = ifelse(SeasonMeanT > Meat.avg, "Warm", "Cool"),
-    weather.class = factor(
-      ifelse(Normal == "Yes", "Normal", paste0(Meat_class, "/", Rain.class)),
-      levels = c("Cool/Wet", "Warm/Wet", "Normal", "Cool/Dry", "Warm/Dry"))
-  ) %>%
-  select(x, y, year, weather.class, Meat.avg, Rain.avg, Meat.sd, Rain.sd,
-         SeasonMeanT, SeasonRain, EmergenceDAS, FloweringDAS, MaturityDAS)
-
-temp_response <- data.frame(temp = seq(10, 40, 0.1)) %>%
-  mutate(response = case_when(
-    temp <= 10              ~ 0,
-    temp <= 30              ~ (temp - 10) / 20,
-    temp <= 40              ~ 1 - (temp - 30) / 10,
-    TRUE                    ~ 0),
-    response_scaled = response * (1400 - 300) + 300)
-
-plot6 <- p6_weather %>%
-  filter(SeasonMeanT > 20) %>%
-  ggplot(aes(x = SeasonMeanT, y = SeasonRain, fill = weather.class)) +
-  geom_point(size = 3, alpha = 0.2, shape = 21) +
-  geom_vline(aes(xintercept = Meat.avg), linewidth = 0.5) +
-  geom_hline(aes(yintercept = Rain.avg), linewidth = 0.5) +
-  geom_rect(aes(xmin = Meat.avg - Meat.sd * 0.5, xmax = Meat.avg + Meat.sd * 0.5,
-                ymin = Rain.avg - Rain.sd * 0.5, ymax = Rain.avg + Rain.sd * 0.5),
-            color = "black", fill = NA, linetype = "dashed") +
-  geom_line(data = temp_response, aes(x = temp, y = response_scaled),
-            inherit.aes = FALSE, color = "black", linewidth = 1.5) +
-  annotate("segment", x = 35, xend = 32.5, y = 1330, yend = 1150,
-           arrow = arrow(length = unit(0.3, "cm"), type = "closed"),
-           linewidth = 0.2, color = "black") +
-  annotate("text", x = 35.2, y = 1350,
-           label = "APSIM phenology\nresponse curve\n(0-1)", hjust = 0, vjust = 1, size = 3.5) +
-  temp +
-  theme(legend.position = "top") +
-  labs(x = "Season temperature (°C)", y = "Season Rainfall (mm)") +
-  scale_y_continuous(limits = c(300, 1400),
-    sec.axis = sec_axis(~ (. - 300) / 1100, name = "Phenology Temperature Response (0-1)",
-                        breaks = seq(0, 1, 0.2))) +
-  scale_x_continuous(limits = c(10, 40)) +
-  scale_fill_manual(values = c("Warm/Dry" = "#bd0026", "Warm/Wet" = "#fc8d59",
-                               "Cool/Dry" = "#91cf60", "Cool/Wet" = "#1a9850",
-                               "Normal" = "#d95f0e")) +
-  guides(fill = guide_legend(override.aes = list(alpha = 1, size = 4, shape = 21)))
-
-ggsave("figures/fig06 - environmental characterization.tiff", plot = plot6,
-       width = 20, height = 15, units = "cm", dpi = 600, compression = "lzw", bg = "white")
-
-
-## ══════════════════════════════════════════════════════════════════════════════
-## ADDITIONAL / DIAGNOSTIC FIGURES — not cited in current paper version
-## (may support reviewer responses or future manuscript sections)
-## fig07 - fig08: phenology distributions; fig10: water-use efficiency maps
-## ══════════════════════════════════════════════════════════════════════════════
-
-## ── Figure 7: Seed-filling duration distribution ─────────────────────── ----
-## Ridgeline density by scenario and CO2 level
-
-p7_data <- simulated0 %>%
-  mutate(seed_fill_dur = MaturityDAS - SeedFillingDAS,
-         co2 = as.factor(co2))
-
-plot7 <- p7_data %>%
-  ggplot(aes(x = seed_fill_dur, y = scenario, colour = co2, fill = co2)) +
-  geom_density_ridges(scale = 0.9, alpha = 0.3, linewidth = 0.8) +
-  temp +
-  labs(x = "Seed-filling duration (days)", y = element_blank(),
-       colour = "CO2 (ppm)", fill = "CO2 (ppm)") +
-  scale_colour_manual(values = c("350" = "#4dac26", "540" = "#d01c8b")) +
-  scale_fill_manual(values   = c("350" = "#4dac26", "540" = "#d01c8b")) +
-  scale_y_discrete(expand = expansion(mult = c(0, 0.4))) +
-  coord_cartesian(clip = "off") +
-  theme(legend.position = "top")
-
-ggsave("figures/fig07 - seed filling duration.tiff", plot = plot7,
-       width = 18, height = 14, units = "cm", dpi = 600, compression = "lzw", bg = "white")
-
-
-## ── Figure 8: Phenology timeline by scenario ─────────────────────────── ----
-## Boxplot of emergence, flowering, seed-fill start, maturity (DAS)
-
-p8_data <- simulated0 %>%
-  select(scenario, co2, EmergenceDAS, FloweringDAS, SeedFillingDAS, MaturityDAS) %>%
-  pivot_longer(cols = c(EmergenceDAS, FloweringDAS, SeedFillingDAS, MaturityDAS),
-               names_to = "DAS_variable", values_to = "DAS") %>%
-  mutate(DAS_variable = factor(DAS_variable,
-    levels = c("EmergenceDAS", "FloweringDAS", "SeedFillingDAS", "MaturityDAS")))
-
-plot8 <- p8_data %>%
-  ggplot(aes(x = DAS, y = scenario, fill = scenario)) +
-  geom_boxplot(alpha = 0.6, outlier.size = 0.3, width = 0.5) +
-  facet_wrap(~ DAS_variable, scales = "free_x") +
-  temp +
-  labs(x = "Days after sowing", y = element_blank()) +
-  theme(legend.position = "none", axis.text.y = element_text(size = 10))
-
-ggsave("figures/fig08 - phenology timeline by scenario.tiff", plot = plot8,
-       width = 22, height = 14, units = "cm", dpi = 600, compression = "lzw", bg = "white")
-
-
-## ── MAIN FIG 2: Phenology change maps ────────────────────────────────── ----
+## ── MAIN FIG 2: Phenology change maps ────────────────────────────────────── ----
 ## Paper: Figure 2 — "Geographical distribution of the relative effects of
 ##        rising temperatures and adaptive strategies on changes in soybean
 ##        total crop cycle (A) and seed-filling period (B)"
@@ -874,13 +474,13 @@ ggsave("figures/fig08 - phenology timeline by scenario.tiff", plot = plot8,
 p9_baseline <- simulated0 %>%
   filter(scenario == "baseline") %>%
   mutate(bl_sf = MaturityDAS - SeedFillingDAS,
-         bl_tc = MaturityDAS - EmergenceDAS) %>%   # emergence → maturity
+         bl_tc = MaturityDAS - EmergenceDAS) %>%
   select(x, y, date, bl_sf, bl_tc)
 
 p9_data <- simulated0 %>%
   filter(scenario != "baseline", co2 == 350) %>%
   mutate(sf_dur = MaturityDAS - SeedFillingDAS,
-         tc_dur = MaturityDAS - EmergenceDAS) %>%   # emergence → maturity
+         tc_dur = MaturityDAS - EmergenceDAS) %>%
   select(x, y, date, scenario, sf_dur, tc_dur) %>%
   left_join(p9_baseline, by = c("x", "y", "date")) %>%
   filter(!is.na(bl_tc)) %>%
@@ -908,77 +508,7 @@ make_pheno_map <- function(data, var, breaks, labels, colors, legend_title) {
     map_theme
 }
 
-## ── Stats for manuscript paragraph ──────────────────────────────────────────
-## Target text:
-## "A shortening of the total crop cycle was observed in xx of the 4,651 fields
-##  (Figure 2A). The total crop cycle length decreased by up to xx weeks across
-##  all site-years. The seed filling period was shortened only in northern
-##  environments..."
-
-p9_cc_site_years <- p9_data %>%
-  filter(scenario == "climate_change")   # one row per field × year
-
-## Field-level means (averaged across years)
-p9_cc <- p9_cc_site_years %>%
-  group_by(x, y) %>%
-  summarise(
-    tc_chg_mean = mean(tc_chg, na.rm = TRUE),
-    sf_chg_mean = mean(sf_chg, na.rm = TRUE),
-    .groups = "drop"
-  )
-
-## Latitude zones based on field-level data
-lat_breaks <- quantile(p9_cc$y, probs = c(0, 1/3, 2/3, 1), na.rm = TRUE)
-p9_cc <- p9_cc %>%
-  mutate(lat_zone = cut(y, breaks = lat_breaks, include.lowest = TRUE,
-                        labels = c("South", "Central", "North")))
-
-cat("\n── Figure 9 manuscript stats ──────────────────────────────\n")
-
-## Total crop cycle — field level (mean across years)
-cat("TOTAL CROP CYCLE CHANGE (field means across years):\n")
-cat(sprintf("  Fields with shorter cycle: %d of %d (%.0f%%)\n",
-            sum(p9_cc$tc_chg_mean < 0, na.rm = TRUE),
-            nrow(p9_cc),
-            mean(p9_cc$tc_chg_mean < 0, na.rm = TRUE) * 100))
-
-## Total crop cycle — site-year level (variation across fields AND years)
-cat("TOTAL CROP CYCLE CHANGE (all site-years — captures year-to-year variation):\n")
-cat(sprintf("  Max shortening : %.1f days (%.1f weeks)\n",
-            min(p9_cc_site_years$tc_chg, na.rm = TRUE),
-            min(p9_cc_site_years$tc_chg, na.rm = TRUE) / 7))
-cat(sprintf("  Max lengthening: %.1f days\n",
-            max(p9_cc_site_years$tc_chg, na.rm = TRUE)))
-cat(sprintf("  Mean           : %.1f days\n",
-            mean(p9_cc_site_years$tc_chg, na.rm = TRUE)))
-
-## Seed-fill — site-year variation
-cat("SEED-FILLING CHANGE (all site-years — captures year-to-year variation):\n")
-cat(sprintf("  Max shortening : %.1f days\n",
-            min(p9_cc_site_years$sf_chg, na.rm = TRUE)))
-cat(sprintf("  Max lengthening: %.1f days\n",
-            max(p9_cc_site_years$sf_chg, na.rm = TRUE)))
-cat(sprintf("  Mean           : %.1f days\n",
-            mean(p9_cc_site_years$sf_chg, na.rm = TRUE)))
-cat(sprintf("  Site-years with shorter seed-fill: %.0f%%\n",
-            mean(p9_cc_site_years$sf_chg < 0, na.rm = TRUE) * 100))
-
-## Seed-fill change by latitude zone
-cat("\nSEED-FILLING CHANGE by latitude zone (field means):\n")
-p9_cc %>%
-  group_by(lat_zone) %>%
-  summarise(
-    n_fields     = n(),
-    mean_sf_chg  = round(mean(sf_chg_mean, na.rm = TRUE), 1),
-    pct_negative = round(mean(sf_chg_mean < 0, na.rm = TRUE) * 100, 1),
-    .groups = "drop"
-  ) %>%
-  print()
-
-cat("───────────────────────────────────────────────────────────\n\n")
-
-## Panel A — total cycle change: one negative bin "-8 to 0" mirrors the first
-## positive bin "0 to 8" for visual consistency
+## Panel A — total cycle change
 plot9a <- make_pheno_map(p9_data, "tc_chg",
   breaks = c(-8, 0, 8, 15, 22, 35),
   labels = c("-8 to 0", "0 to 8", "8 to 15", "15 to 22", "> 22"),
@@ -999,14 +529,64 @@ plot9 <- plot_grid(plot9a, plot9b, ncol = 1, align = "v", axis = "lr")
 ggsave("figures/fig09 - phenology change maps.tiff", plot = plot9,
        width = 18, height = 18, units = "cm", dpi = 600, compression = "lzw", bg = "white")
 
-## ── STATS 2: Main Fig 2 — crop cycle and seed-filling duration changes ───────
+## ── STATS 2: Main Fig 2 — crop cycle and seed-filling duration changes ────────
 ## Paper (§3.2): seed-filling and total crop cycle changes per scenario (CO2=350)
-## Used to fill discussion on phenological mechanisms of synergy
+## and climate_change-only stats for the "shortening" paragraph in Results
 {
   cat(paste(rep("═", 70), collapse=""), "\n")
   cat("STATS 2 — MAIN FIG 2: Phenology changes (CO2=350, vs baseline)\n")
   cat(paste(rep("─", 70), collapse=""), "\n")
 
+  ## Climate change scenario only — field-level means for the crop-cycle shortening paragraph
+  p9_cc_site_years <- p9_data %>% filter(scenario == "climate_change")
+
+  p9_cc <- p9_cc_site_years %>%
+    group_by(x, y) %>%
+    summarise(
+      tc_chg_mean = mean(tc_chg, na.rm = TRUE),
+      sf_chg_mean = mean(sf_chg, na.rm = TRUE),
+      .groups = "drop"
+    )
+
+  lat_breaks <- quantile(p9_cc$y, probs = c(0, 1/3, 2/3, 1), na.rm = TRUE)
+  p9_cc <- p9_cc %>%
+    mutate(lat_zone = cut(y, breaks = lat_breaks, include.lowest = TRUE,
+                          labels = c("South", "Central", "North")))
+
+  cat("\nTOTAL CROP CYCLE — climate_change vs baseline:\n")
+  cat(sprintf("  Fields with shorter cycle: %d of %d (%.0f%%)\n",
+              sum(p9_cc$tc_chg_mean < 0, na.rm = TRUE),
+              nrow(p9_cc),
+              mean(p9_cc$tc_chg_mean < 0, na.rm = TRUE) * 100))
+  cat(sprintf("  Max shortening : %.1f days (%.1f weeks)\n",
+              min(p9_cc_site_years$tc_chg, na.rm = TRUE),
+              min(p9_cc_site_years$tc_chg, na.rm = TRUE) / 7))
+  cat(sprintf("  Max lengthening: %.1f days\n",
+              max(p9_cc_site_years$tc_chg, na.rm = TRUE)))
+  cat(sprintf("  Mean           : %.1f days\n",
+              mean(p9_cc_site_years$tc_chg, na.rm = TRUE)))
+
+  cat("\nSEED-FILLING — climate_change vs baseline (all site-years):\n")
+  cat(sprintf("  Max shortening : %.1f days\n",
+              min(p9_cc_site_years$sf_chg, na.rm = TRUE)))
+  cat(sprintf("  Max lengthening: %.1f days\n",
+              max(p9_cc_site_years$sf_chg, na.rm = TRUE)))
+  cat(sprintf("  Mean           : %.1f days\n",
+              mean(p9_cc_site_years$sf_chg, na.rm = TRUE)))
+  cat(sprintf("  Site-years with shorter seed-fill: %.0f%%\n",
+              mean(p9_cc_site_years$sf_chg < 0, na.rm = TRUE) * 100))
+
+  cat("\nSEED-FILLING CHANGE by latitude zone (field means):\n")
+  p9_cc %>%
+    group_by(lat_zone) %>%
+    summarise(
+      n_fields     = n(),
+      mean_sf_chg  = round(mean(sf_chg_mean, na.rm = TRUE), 1),
+      pct_negative = round(mean(sf_chg_mean < 0, na.rm = TRUE) * 100, 1),
+      .groups = "drop"
+    ) %>% print()
+
+  ## All adaptation scenarios — phenology changes vs baseline
   s350 <- simulated0 %>% filter(co2 == 350)
   bl_ph <- s350 %>% filter(scenario == "baseline") %>%
     select(x, y, date,
@@ -1042,7 +622,6 @@ ggsave("figures/fig09 - phenology change maps.tiff", plot = plot9,
               max  = round(max(sf_chg,   na.rm=TRUE), 1), .groups="drop") %>%
     print()
 
-  # Absolute durations for context
   cat("\nAbsolute durations (days, mean across all site-years):\n")
   cat(sprintf("  Baseline seed-filling: %.1f days | crop cycle: %.1f days\n",
       mean(ph_data$sf_dur_bl, na.rm=TRUE), mean(ph_data$tc_dur_bl, na.rm=TRUE)))
@@ -1054,11 +633,409 @@ ggsave("figures/fig09 - phenology change maps.tiff", plot = plot9,
   cat(paste(rep("═", 70), collapse=""), "\n\n")
 }
 
+
 ## ══════════════════════════════════════════════════════════════════════════════
-## SUPPLEMENTARY FIGURES — generated here; S1/S2 are external (not generated)
+## SUPPLEMENTARY FIGURES
+## S1 (calibration) and S2 (biomass validation) are external — not generated here
 ## ══════════════════════════════════════════════════════════════════════════════
 
-## ── Figure 10: Water-use efficiency spatial maps ──────────────────────── ----
+## ── SUPP FIG S3: Environmental characterization ──────────────────────────── ----
+## Paper: Figure S3 — "Environmental characterization of baseline conditions
+##        across all studied site-years. The APSIM phenology response curve (0-1)
+##        is presented; solid lines indicate median growing-season temperature
+##        and total precipitation."
+
+p6_weather <- simulated0 %>%
+  filter(scenario == "baseline", co2 == 350) %>%
+  mutate(year = year(date)) %>%
+  mutate(
+    Rain.avg    = mean(SeasonRain),
+    Meat.avg    = mean(SeasonMeanT),
+    Rain.sd     = sd(SeasonRain),
+    Meat.sd     = sd(SeasonMeanT),
+    Normal      = ifelse(
+      SeasonRain  < Rain.avg + Rain.sd * 0.5 & SeasonRain  > Rain.avg - Rain.sd * 0.5 &
+      SeasonMeanT < Meat.avg + Meat.sd * 0.5 & SeasonMeanT > Meat.avg - Meat.sd * 0.5,
+      "Yes", "No"),
+    Rain.class    = ifelse(SeasonRain > Rain.avg, "Wet", "Dry"),
+    Meat_class    = ifelse(SeasonMeanT > Meat.avg, "Warm", "Cool"),
+    weather.class = factor(
+      ifelse(Normal == "Yes", "Normal", paste0(Meat_class, "/", Rain.class)),
+      levels = c("Cool/Wet", "Warm/Wet", "Normal", "Cool/Dry", "Warm/Dry"))
+  ) %>%
+  select(x, y, year, weather.class, Meat.avg, Rain.avg, Meat.sd, Rain.sd,
+         SeasonMeanT, SeasonRain, EmergenceDAS, FloweringDAS, MaturityDAS)
+
+temp_response <- data.frame(temp = seq(10, 40, 0.1)) %>%
+  mutate(response = case_when(
+    temp <= 10 ~ 0,
+    temp <= 30 ~ (temp - 10) / 20,
+    temp <= 40 ~ 1 - (temp - 30) / 10,
+    TRUE       ~ 0),
+    response_scaled = response * (1400 - 300) + 300)
+
+plot6 <- p6_weather %>%
+  filter(SeasonMeanT > 20) %>%
+  ggplot(aes(x = SeasonMeanT, y = SeasonRain, fill = weather.class)) +
+  geom_point(size = 3, alpha = 0.2, shape = 21) +
+  geom_vline(aes(xintercept = Meat.avg), linewidth = 0.5) +
+  geom_hline(aes(yintercept = Rain.avg), linewidth = 0.5) +
+  geom_rect(aes(xmin = Meat.avg - Meat.sd * 0.5, xmax = Meat.avg + Meat.sd * 0.5,
+                ymin = Rain.avg - Rain.sd * 0.5, ymax = Rain.avg + Rain.sd * 0.5),
+            color = "black", fill = NA, linetype = "dashed") +
+  geom_line(data = temp_response, aes(x = temp, y = response_scaled),
+            inherit.aes = FALSE, color = "black", linewidth = 1.5) +
+  annotate("segment", x = 35, xend = 32.5, y = 1330, yend = 1150,
+           arrow = arrow(length = unit(0.3, "cm"), type = "closed"),
+           linewidth = 0.2, color = "black") +
+  annotate("text", x = 35.2, y = 1350,
+           label = "APSIM phenology\nresponse curve\n(0-1)", hjust = 0, vjust = 1, size = 3.5) +
+  temp +
+  theme(legend.position = "top") +
+  labs(x = "Season temperature (°C)", y = "Season Rainfall (mm)") +
+  scale_y_continuous(limits = c(300, 1400),
+    sec.axis = sec_axis(~ (. - 300) / 1100, name = "Phenology Temperature Response (0-1)",
+                        breaks = seq(0, 1, 0.2))) +
+  scale_x_continuous(limits = c(10, 40)) +
+  scale_fill_manual(values = c("Warm/Dry" = "#bd0026", "Warm/Wet" = "#fc8d59",
+                               "Cool/Dry" = "#91cf60", "Cool/Wet" = "#1a9850",
+                               "Normal" = "#d95f0e")) +
+  guides(fill = guide_legend(override.aes = list(alpha = 1, size = 4, shape = 21)))
+
+ggsave("figures/fig06 - environmental characterization.tiff", plot = plot6,
+       width = 20, height = 15, units = "cm", dpi = 600, compression = "lzw", bg = "white")
+
+
+## ── SUPP FIG S4: Soybean sowing progress in Arkansas ────────────────────── ----
+## Paper: Figure S4 — "USDA-NASS soybean sowing progress in Arkansas 1990–2025.
+##        Grey lines represent historical years; green thicker line is the average."
+## Generates: figures/fig_progress_all.tiff and figures/fig_progress_recent.tiff
+
+source("code/utils/sowing-progress.R")
+
+
+## ── SUPP FIG S5: Yield density + spatial map (climate change without adapt.) ── ----
+## Paper: Figure S5 — "Density distribution of simulated soybean yields without
+##        adaptation under the baseline and +2°C scenarios with and without
+##        elevated [CO2] (A), and its geographical distribution (B)"
+
+p1_data <- simulated0 %>%
+  filter(scenario %in% c("baseline", "climate_change")) %>%
+  group_by(x, y, scenario, co2) %>%
+  summarise(Yield_kgha = mean(Yield_kgha, na.rm = TRUE), .groups = "drop") %>%
+  mutate(
+    scenario_co2 = factor(
+      paste0(scenario, co2),
+      levels = c("baseline350", "climate_change350", "climate_change540"),
+      labels = c("Baseline", "2°C-increase", "2°C-increase with CO2")
+    ),
+    yield_bin = cut(Yield_kgha,
+      breaks = c(-Inf, 2500, 3500, 4500, 5500, Inf),
+      labels = c("<2500", "2500-3500", "3500-4500", "4500-5500", ">5500"),
+      include.lowest = TRUE)
+  )
+
+summary(p1_data %>% filter(scenario_co2 == "Baseline"))
+
+plot1a <- p1_data %>%
+  mutate(scenario_co2 = factor(scenario_co2,
+    labels = c("Baseline", "2°C-increase", "2°C-increase\nwith elevated CO2"))) %>%
+  ggplot(aes(x = Yield_kgha, y = scenario_co2, colour = scenario_co2)) +
+  geom_density_ridges(scale = 0.9, fill = NA, linewidth = 1) +
+  temp +
+  labs(x = "Yield (kg/ha)", y = element_blank()) +
+  scale_colour_manual(values = c("black", "#bd0026", "#1a9850")) +
+  theme(legend.position = "none") +
+  scale_y_discrete(expand = expansion(mult = c(0, 0.4)))
+
+df_p1 <- to_stars_grid(p1_data, dims = c("x", "y", "scenario_co2"))
+plot1b <- ggplot() +
+  geom_sf(data = ark, fill = "grey30", color = "black") +
+  geom_stars(data = df_p1, aes(fill = yield_bin)) +
+  geom_sf(data = usa_counties, fill = NA, colour = "black", linewidth = 0.5) +
+  coord_sf(xlim = c(360000, 570000)) +
+  facet_wrap(~ scenario_co2, nrow = 1) +
+  temp +
+  scale_fill_manual(
+    values = c("<2500" = "#bd0026", "2500-3500" = "#e31a1c", "3500-4500" = "#fc8d59",
+               "4500-5500" = "#91cf60", ">5500" = "#1a9850"),
+    na.value = "grey50", na.translate = FALSE,
+    name = "Yield (kg/ha)") +
+  theme(axis.title = element_blank(), axis.text = element_blank(),
+        legend.position = "left", legend.direction = "vertical",
+        legend.title = element_text(size = 12))
+
+plot1 <- plot_grid(plot1a, plot1b, ncol = 1, align = "v", axis = "r",
+                   labels = "AUTO", rel_heights = c(0.4, 1))
+
+ggsave("figures/fig01 - climate change without adaptation.tiff", plot = plot1,
+       width = 20, height = 15, units = "cm", dpi = 600, compression = "lzw", bg = "white")
+
+## ── STATS S5: Supp Fig S5 — baseline yield distribution ──────────────────────
+## Paper (§3.1): "median baseline yield 4,525 kg/ha with a south-to-north
+##   gradient ranging from 2,235 to 4,981 kg/ha"
+{
+  cat(paste(rep("═", 70), collapse=""), "\n")
+  cat("STATS S5 — SUPP FIG S5: Baseline yield distribution\n")
+  cat(paste(rep("─", 70), collapse=""), "\n")
+  bl <- simulated0 %>% filter(scenario == "baseline") %>%
+        group_by(x, y) %>% summarise(yield = mean(Yield_kgha, na.rm=TRUE), .groups="drop")
+  cat(sprintf("  Median field-mean baseline yield: %.0f kg/ha\n", median(bl$yield, na.rm=TRUE)))
+  cat(sprintf("  Field-mean yield range:           %.0f – %.0f kg/ha\n",
+              min(bl$yield, na.rm=TRUE), max(bl$yield, na.rm=TRUE)))
+  cat(sprintf("  Mean baseline yield (all site-years): %.0f kg/ha\n",
+              mean(simulated0$Yield_kgha[simulated0$scenario=="baseline"], na.rm=TRUE)))
+  cat(paste(rep("═", 70), collapse=""), "\n\n")
+}
+
+
+## ── SUPP FIG S6: Temperature–yield scatter ────────────────────────────────── ----
+## Paper: Figure S6 — "Relationship between season temperature (May-October) and
+##        soybean seed yield across 40 years and 4,651 fields under a 2°C
+##        temperature increase scenario without adaptation"
+## Yield vs season temperature under +2°C, colored by latitude
+
+p2_data <- simulated0 %>%
+  filter(scenario == "climate_change", co2 == 350) %>%
+  mutate(
+    Rain.avg    = mean(SeasonRain),
+    Meat.avg    = mean(SeasonMeanT),
+    Rain.sd     = sd(SeasonRain),
+    Meat.sd     = sd(SeasonMeanT),
+    Normal      = ifelse(
+      SeasonRain  < Rain.avg + Rain.sd  & SeasonRain  > Rain.avg - Rain.sd &
+      SeasonMeanT < Meat.avg + Meat.sd  & SeasonMeanT > Meat.avg - Meat.sd,
+      "Yes", "No"),
+    Rain.class    = ifelse(SeasonRain > Rain.avg, "Wet", "Dry"),
+    Meat_class    = ifelse(SeasonMeanT > Meat.avg, "Warm", "Cool"),
+    weather.class = factor(
+      ifelse(Normal == "Yes", "Normal", paste0(Meat_class, "/", Rain.class)),
+      levels = c("Cool/Wet", "Warm/Wet", "Normal", "Cool/Dry", "Warm/Dry"))
+  )
+
+slope_overall  <- coef(lm(Yield_kgha ~ SeasonMeanT, data = p2_data))["SeasonMeanT"]
+slope_warm_dry <- coef(lm(Yield_kgha ~ SeasonMeanT,
+  data = filter(p2_data, weather.class == "Warm/Dry")))["SeasonMeanT"]
+
+cat(sprintf("Overall slope: %.0f kg/ha/°C (%.1f%%/°C)\n",
+            slope_overall, slope_overall / mean(p2_data$Yield_kgha) * 100))
+cat(sprintf("Warm/Dry slope: %.0f kg/ha/°C\n", slope_warm_dry))
+
+min_y  <- min(p2_data$y);  mean_y <- mean(p2_data$y);  max_y <- max(p2_data$y)
+
+plot2 <- p2_data %>%
+  filter(weather.class %in% c("Cool/Wet", "Normal", "Warm/Dry")) %>%
+  ggplot(aes(x = SeasonMeanT, y = Yield_kgha)) +
+  geom_point(aes(colour = y), size = 2, alpha = 0.3) +
+  geom_smooth(method = "lm", se = FALSE, colour = "black", linewidth = 0.8) +
+  geom_smooth(data = ~ filter(., weather.class == "Warm/Dry"),
+              aes(group = weather.class), method = "lm", se = FALSE,
+              colour = "#008837", linewidth = 1.2) +
+  temp +
+  labs(x = "Season temperature (°C)", y = "Seed yield (kg/ha)") +
+  scale_y_continuous(limits = c(1000, 6300), breaks = seq(1000, 6000, 1000)) +
+  scale_x_continuous(limits = c(21, 31), breaks = seq(21, 31, 2)) +
+  scale_color_gradientn(
+    colors = c("#a50f15", "#fb6a4a", "white"),
+    values = scales::rescale(c(min_y, mean_y, max_y)),
+    breaks = c(min_y, mean_y, max_y), labels = c("33.0", "35.0", "36.5"),
+    limits = c(min_y, max_y),
+    guide  = guide_colorbar(barwidth = 1.5, barheight = 5,
+                            frame.colour = "black", frame.linewidth = 1),
+    name   = "Latitude") +
+  theme(legend.title = element_text(size = 12), legend.text = element_text(size = 12)) +
+  annotate("segment", x = 22.5, xend = 22.8, y = 5400, yend = 4650,
+           arrow = arrow(length = unit(0.25, "cm")), color = "black", linewidth = 0.5) +
+  annotate("text", x = 24.2, y = 5500,
+           label = paste0("Overall = ", round(slope_overall, 0), " kg/ha/°C"), size = 4) +
+  annotate("segment", x = 29, xend = 29, y = 1600, yend = 3600,
+           arrow = arrow(length = unit(0.25, "cm")), color = "black", linewidth = 0.5) +
+  annotate("text", x = 27.4, y = 1500,
+           label = paste0("Warm & Dry = ", round(slope_warm_dry, 0), " kg/ha/°C"),
+           size = 4, colour = "#008837") +
+  guides(linetype = "none")
+
+ggsave("figures/fig02 - temperature impacts.tiff", plot = plot2,
+       width = 15, height = 12, units = "cm", dpi = 600, compression = "lzw", bg = "white")
+
+## ── STATS S6: Supp Fig S6 — temperature–yield regression ─────────────────────
+## Paper (§3.1): "decreased by 117 kg/ha for every degree increase in season
+##   temperature"; "167 kg/ha per °C under warm and dry conditions"
+{
+  cat(paste(rep("═", 70), collapse=""), "\n")
+  cat("STATS S6 — SUPP FIG S6: Temperature–yield regression (CO2=350, +2°C)\n")
+  cat(paste(rep("─", 70), collapse=""), "\n")
+  cc350 <- simulated0 %>% filter(scenario == "climate_change", co2 == 350)
+  sl_all <- coef(lm(Yield_kgha ~ SeasonMeanT, data = cc350))["SeasonMeanT"]
+  sl_pct <- sl_all / mean(cc350$Yield_kgha, na.rm=TRUE) * 100
+  t_mu   <- mean(cc350$SeasonMeanT, na.rm=TRUE)
+  r_mu   <- mean(cc350$SeasonRain,  na.rm=TRUE)
+  cc_wd  <- cc350 %>% filter(SeasonMeanT > t_mu, SeasonRain < r_mu)
+  sl_wd  <- coef(lm(Yield_kgha ~ SeasonMeanT, data = cc_wd))["SeasonMeanT"]
+  cat(sprintf("  Overall slope:    %.0f kg/ha/°C  (%.1f%%/°C)\n", sl_all, sl_pct))
+  cat(sprintf("  Warm/Dry slope:   %.0f kg/ha/°C\n", sl_wd))
+  cat(paste(rep("═", 70), collapse=""), "\n\n")
+}
+
+
+## ══════════════════════════════════════════════════════════════════════════════
+## ADDITIONAL / DIAGNOSTIC FIGURES — not cited in current paper version
+## (may support reviewer responses or future manuscript sections)
+## ══════════════════════════════════════════════════════════════════════════════
+
+## ── ADDITIONAL Fig 3: Adaptation strategies — violin (CO2 comparison) ──────── ----
+## Half-violin + half-boxplot of yield change (%) vs baseline
+## All 4 adaptation scenarios × CO2 level
+
+p3_baseline <- simulated0 %>%
+  filter(scenario == "baseline") %>%
+  select(x, y, date, baseline = Yield_kgha)
+
+p3_data <- simulated0 %>%
+  filter(scenario != "baseline") %>%
+  select(x, y, scenario, co2, date, Yield_kgha) %>%
+  pivot_wider(names_from = scenario, values_from = Yield_kgha) %>%
+  left_join(p3_baseline, by = c("x", "y", "date")) %>%
+  mutate(across(all_of(scenario_levels),
+                ~ (. - baseline) / baseline * 100)) %>%
+  select(-baseline) %>%
+  pivot_longer(cols = all_of(scenario_levels),
+               names_to = "scenario", values_to = "Yield_kgha") %>%
+  mutate(scenario = factor(scenario, levels = scenario_levels,
+                           labels = scenario_labels_long))
+
+p3_data %>%
+  group_by(co2, scenario) %>%
+  summarise(
+    median = round(median(Yield_kgha, na.rm = TRUE), 1),
+    q1     = round(quantile(Yield_kgha, 0.25, na.rm = TRUE), 1),
+    q3     = round(quantile(Yield_kgha, 0.75, na.rm = TRUE), 1),
+    .groups = "drop") %>%
+  print()
+
+plot3 <- ggplot(p3_data,
+    aes(x = factor(scenario), y = Yield_kgha,
+        fill = as.factor(co2), colour = as.factor(co2))) +
+  geom_abline(intercept = 0, slope = 0, linetype = "dashed") +
+  geom_half_violin(
+    aes(group = interaction(factor(scenario), as.factor(co2))),
+    side = "l", trim = FALSE, alpha = 0.4, colour = NA,
+    position = position_dodge(width = 0.6)) +
+  geom_half_boxplot(
+    aes(group = interaction(factor(scenario), as.factor(co2))),
+    side = "r", position = position_dodge(width = 0.6),
+    outlier.shape = NA, width = 0.5, color = "black", size = 0.5) +
+  temp +
+  scale_colour_manual(values = c("#4dac26", "#d01c8b"),
+                      label  = c("Without elevated CO2", "With elevated CO2")) +
+  scale_fill_manual(values   = c("#4dac26", "#d01c8b"),
+                    label    = c("Without elevated CO2", "With elevated CO2")) +
+  labs(x = element_blank(), y = "Yield change (%)") +
+  theme(legend.position = "top", axis.text.x = element_text(angle = 30, hjust = 1)) +
+  scale_y_continuous(breaks = seq(-20, 40, 10), limits = c(-20, 40))
+
+ggsave("figures/fig03 - adaptation strategies summary.tiff", plot = plot3,
+       width = 15, height = 15, units = "cm", dpi = 600, compression = "lzw", bg = "white")
+
+
+## ── ADDITIONAL Fig 4: Adaptation strategies — spatial yield change map ──────── ----
+## Mean yield change (%) vs baseline, averaged across 40 years per cell
+## Faceted by scenario × CO2
+
+p4_baseline <- simulated0 %>%
+  filter(scenario == "baseline") %>%
+  select(x, y, date, baseline = Yield_kgha)
+
+p4_data <- simulated0 %>%
+  filter(scenario != "baseline") %>%
+  select(x, y, scenario, co2, date, Yield_kgha) %>%
+  left_join(p4_baseline, by = c("x", "y", "date")) %>%
+  mutate(pct_change = (Yield_kgha - baseline) / baseline * 100,
+         scenario   = factor(scenario, levels = scenario_levels, labels = scenario_labels)) %>%
+  group_by(x, y, scenario, co2) %>%
+  summarise(Yield_kgha = round(mean(pct_change, na.rm = TRUE), 1), .groups = "drop") %>%
+  mutate(
+    yield_bin = cut(Yield_kgha,
+      breaks = c(-15, 0, 15, 30, 45),
+      labels = c("-15 to 0", "0 to 15", "15 to 30", "30 to 45"),
+      include.lowest = TRUE),
+    co2 = factor(as.character(co2),
+      levels = c("350", "540"),
+      labels = c("Without elevated CO2", "With elevated CO2"))
+  )
+
+p4_data %>%
+  group_by(co2, scenario) %>%
+  summarise(pct_positive = round(mean(Yield_kgha > 0, na.rm = TRUE) * 100, 1),
+            .groups = "drop") %>%
+  print()
+
+df_p4 <- to_stars_grid(p4_data, dims = c("x", "y", "scenario", "co2"))
+
+plot4 <- ggplot() +
+  geom_sf(data = ark, fill = "grey50", color = "black") +
+  geom_stars(data = df_p4, aes(fill = yield_bin)) +
+  geom_sf(data = usa_counties, fill = NA, colour = "black", linewidth = 0.5) +
+  coord_sf(xlim = c(360000, 570000)) +
+  facet_grid(co2 ~ scenario) +
+  temp +
+  scale_fill_manual(
+    values = c("-15 to 0" = "#b10026", "0 to 15" = "#e5f5f9",
+               "15 to 30" = "#99d8c9", "30 to 45" = "#2ca25f"),
+    na.value = "grey50", na.translate = FALSE,
+    name = "Yield change (%)") +
+  map_theme
+
+ggsave("figures/fig04 - adaptation strategies map.tiff", plot = plot4,
+       width = 15, height = 15, units = "cm", dpi = 600, compression = "lzw", bg = "white")
+
+
+## ── ADDITIONAL Fig 7: Seed-filling duration distribution ─────────────────────── ----
+## Ridgeline density by scenario and CO2 level
+
+p7_data <- simulated0 %>%
+  mutate(seed_fill_dur = MaturityDAS - SeedFillingDAS,
+         co2 = as.factor(co2))
+
+plot7 <- p7_data %>%
+  ggplot(aes(x = seed_fill_dur, y = scenario, colour = co2, fill = co2)) +
+  geom_density_ridges(scale = 0.9, alpha = 0.3, linewidth = 0.8) +
+  temp +
+  labs(x = "Seed-filling duration (days)", y = element_blank(),
+       colour = "CO2 (ppm)", fill = "CO2 (ppm)") +
+  scale_colour_manual(values = c("350" = "#4dac26", "540" = "#d01c8b")) +
+  scale_fill_manual(values   = c("350" = "#4dac26", "540" = "#d01c8b")) +
+  scale_y_discrete(expand = expansion(mult = c(0, 0.4))) +
+  coord_cartesian(clip = "off") +
+  theme(legend.position = "top")
+
+ggsave("figures/fig07 - seed filling duration.tiff", plot = plot7,
+       width = 18, height = 14, units = "cm", dpi = 600, compression = "lzw", bg = "white")
+
+
+## ── ADDITIONAL Fig 8: Phenology timeline by scenario ─────────────────────────── ----
+## Boxplot of emergence, flowering, seed-fill start, maturity (DAS)
+
+p8_data <- simulated0 %>%
+  select(scenario, co2, EmergenceDAS, FloweringDAS, SeedFillingDAS, MaturityDAS) %>%
+  pivot_longer(cols = c(EmergenceDAS, FloweringDAS, SeedFillingDAS, MaturityDAS),
+               names_to = "DAS_variable", values_to = "DAS") %>%
+  mutate(DAS_variable = factor(DAS_variable,
+    levels = c("EmergenceDAS", "FloweringDAS", "SeedFillingDAS", "MaturityDAS")))
+
+plot8 <- p8_data %>%
+  ggplot(aes(x = DAS, y = scenario, fill = scenario)) +
+  geom_boxplot(alpha = 0.6, outlier.size = 0.3, width = 0.5) +
+  facet_wrap(~ DAS_variable, scales = "free_x") +
+  temp +
+  labs(x = "Days after sowing", y = element_blank()) +
+  theme(legend.position = "none", axis.text.y = element_text(size = 10))
+
+ggsave("figures/fig08 - phenology timeline by scenario.tiff", plot = plot8,
+       width = 22, height = 14, units = "cm", dpi = 600, compression = "lzw", bg = "white")
+
+
+## ── ADDITIONAL Fig 10: Water-use efficiency spatial maps ──────────────────────── ----
 ## One TIFF per variable; CO2 = 350 only; faceted by scenario
 
 save_wue_map <- function(var, label, df_stars, counties) {

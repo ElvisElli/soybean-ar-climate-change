@@ -1,6 +1,19 @@
 ## ============================================================
 ## 02-analysis.R  —  Manuscript figures & supplementary plots
 ## Run from repo root:  source("code/02-analysis.R")
+##
+## Figure order follows the paper (paper-06-17-2026.docx):
+##
+##  MAIN MANUSCRIPT
+##   Fig 1  → fig05 - adaptation strategies merged  (violin + map)
+##
+##  SUPPLEMENTARY MATERIAL
+##   Fig S3 → fig06 - environmental characterization
+##   Fig S4 → fig01 - climate change without adaptation (density + map)
+##   Fig S5 → fig02 - temperature impacts (scatter)
+##
+##  ADDITIONAL / DIAGNOSTIC (not in paper)
+##   fig03, fig04, fig07–fig10, insp_*
 ## ============================================================
 
 ## ── 0. Setup ────────────────────────────────────────────────────────────────
@@ -133,7 +146,10 @@ map_theme <- theme(
 )
 
 
-## ── Figure 1: Climate change without adaptation ──────────────────────── ----
+## ── SUPP FIG S4: Yield density + spatial map (climate change without adapt.) ─
+## Paper: Figure S4 — "Density distribution of simulated soybean yields under
+##        baseline and +2°C scenarios with and without elevated CO2 (A), and
+##        geographical distribution (B)"
 ## Ridgeline distribution (A) + spatial yield map (B)
 ## Scenarios: Baseline / +2°C / +2°C with elevated CO2
 
@@ -189,8 +205,26 @@ plot1 <- plot_grid(plot1a, plot1b, ncol = 1, align = "v", axis = "r",
 ggsave("figures/fig01 - climate change without adaptation.tiff", plot = plot1,
        width = 20, height = 15, units = "cm", dpi = 600, compression = "lzw", bg = "white")
 
+## ── STATS S4: Supp Fig S4 — baseline yield distribution ─────────────────────
+## Paper (§3.1): "median baseline yield 4,525 kg/ha with a south-to-north
+##   gradient ranging from 2,235 to 4,981 kg/ha"
+{
+  cat(paste(rep("═", 70), collapse=""), "\n")
+  cat("STATS S4 — SUPP FIG S4: Baseline yield distribution\n")
+  cat(paste(rep("─", 70), collapse=""), "\n")
+  bl <- simulated0 %>% filter(scenario == "baseline") %>%
+        group_by(x, y) %>% summarise(yield = mean(Yield_kgha, na.rm=TRUE), .groups="drop")
+  cat(sprintf("  Median field-mean baseline yield: %.0f kg/ha\n", median(bl$yield, na.rm=TRUE)))
+  cat(sprintf("  Field-mean yield range:           %.0f – %.0f kg/ha\n",
+              min(bl$yield, na.rm=TRUE), max(bl$yield, na.rm=TRUE)))
+  cat(sprintf("  Mean baseline yield (all site-years): %.0f kg/ha\n",
+              mean(simulated0$Yield_kgha[simulated0$scenario=="baseline"], na.rm=TRUE)))
+  cat(paste(rep("═", 70), collapse=""), "\n\n")
+}
 
-## ── Figure 2: Temperature-yield relationship ─────────────────────────── ----
+## ── SUPP FIG S5: Temperature–yield scatter ──────────────────────────────── --
+## Paper: Figure S5 — "Relationship between season temperature and soybean seed
+##        yield across 40 years and 4,651 fields under +2°C scenario"
 ## Yield vs season temperature under +2°C, colored by latitude
 ## Separate regression lines for all data and Warm/Dry site-years
 
@@ -257,8 +291,27 @@ plot2 <- p2_data %>%
 ggsave("figures/fig02 - temperature impacts.tiff", plot = plot2,
        width = 15, height = 12, units = "cm", dpi = 600, compression = "lzw", bg = "white")
 
+## ── STATS S5: Supp Fig S5 — temperature–yield regression ────────────────────
+## Paper (§3.1): "decreased by 117 kg/ha for every degree increase in season
+##   temperature"; "167 kg/ha per °C under warm and dry conditions"
+## These are printed during figure construction above (slope_overall, slope_warm_dry)
+{
+  cat(paste(rep("═", 70), collapse=""), "\n")
+  cat("STATS S5 — SUPP FIG S5: Temperature–yield regression (CO2=350, +2°C)\n")
+  cat(paste(rep("─", 70), collapse=""), "\n")
+  cc350 <- simulated0 %>% filter(scenario == "climate_change", co2 == 350)
+  sl_all <- coef(lm(Yield_kgha ~ SeasonMeanT, data = cc350))["SeasonMeanT"]
+  sl_pct <- sl_all / mean(cc350$Yield_kgha, na.rm=TRUE) * 100
+  t_mu   <- mean(cc350$SeasonMeanT, na.rm=TRUE)
+  r_mu   <- mean(cc350$SeasonRain,  na.rm=TRUE)
+  cc_wd  <- cc350 %>% filter(SeasonMeanT > t_mu, SeasonRain < r_mu)
+  sl_wd  <- coef(lm(Yield_kgha ~ SeasonMeanT, data = cc_wd))["SeasonMeanT"]
+  cat(sprintf("  Overall slope:    %.0f kg/ha/°C  (%.1f%%/°C)\n", sl_all, sl_pct))
+  cat(sprintf("  Warm/Dry slope:   %.0f kg/ha/°C\n", sl_wd))
+  cat(paste(rep("═", 70), collapse=""), "\n\n")
+}
 
-## ── Figure 3: Adaptation strategies — violin/boxplot summary ─────────── ----
+## ── ADDITIONAL FIGS (not in paper): fig03, fig04 ───────────────────────── --
 ## Half-violin + half-boxplot of yield change (%) vs baseline
 ## All 4 adaptation scenarios × CO2 level
 
@@ -365,8 +418,10 @@ ggsave("figures/fig04 - adaptation strategies map.tiff", plot = plot4,
        width = 15, height = 15, units = "cm", dpi = 600, compression = "lzw", bg = "white")
 
 
-## ── Figure 5: Adaptation strategies — merged (violin + map) ──────────── ----
-## Combined manuscript figure (replicates Figures 3 and 4 inline)
+## ── MAIN FIG 1: Adaptation strategies — merged (violin + map) ────────── ----
+## Paper: Figure 1 — "Overall relative effects of rising temperatures and
+##        adaptive strategies on soybean seed yield across 4,651 fields"
+## Combined manuscript figure (violin panel A + spatial map panel B)
 
 p5_baseline <- simulated0 %>%
   filter(scenario == "baseline") %>%
@@ -443,56 +498,120 @@ plot5_merged <- plot_grid(
 ggsave("figures/fig05 - adaptation strategies merged.tiff", plot = plot5_merged,
        width = 30, height = 15, units = "cm", dpi = 600, compression = "lzw", bg = "white")
 
-## ── Summary table: synergistic effect on yields (guides fig05 discussion) ───
-## All comparisons vs BASELINE, CO2 = 350 ppm only (no CO2 elevation).
-## Key message: individual adaptations have near-zero effect; the combination
-## delivers a large synergistic gain that more than offsets warming losses.
+## ── STATS 1: Main Fig 1 — all cited numbers for Results §3.1 and §3.2 ───────
+## Paper cites (§3.1): "decreased yields 5.9% on average, values ranging from
+##   -14.8% to +2.6%"; "median baseline yield 4,525 kg/ha"; "117 kg/ha per °C";
+##   "167 kg/ha per °C under warm/dry"; "12.4% greater under combined elevated T+CO2"
+## Paper cites (§3.2): "increased yield by [X]% under 2°C without CO2";
+##   "standalone LM: median yields comparable to baseline"; "61% of fields positive"
+##   "combined elevated CO2 + stacked management increased yields 30%, 16-44%"
 {
-  syn_df <- simulated0 %>% filter(co2 == 350)
+  cat(paste(rep("═", 70), collapse = ""), "\n")
+  cat("STATS 1 — MAIN FIG 1 (all CO2 levels, all scenarios vs baseline)\n")
+  cat(paste(rep("─", 70), collapse = ""), "\n")
 
-  mean_yield <- function(sc)
-    mean(syn_df$Yield_kgha[syn_df$scenario == sc], na.rm = TRUE)
+  ## ── §3.1: Temperature and CO2 impacts (no adaptation) ──────────────────────
+  cat("\n§3.1  Climate change without adaptation (CO2 = 350 ppm)\n\n")
 
-  ybl  <- mean_yield("baseline")
-  ycc  <- mean_yield("climate_change")
-  ylm  <- mean_yield("longer_mat")
-  yes  <- mean_yield("early_sowing")
-  ycmb <- mean_yield("early_sowing_longer_mat")
+  bl  <- simulated0 %>% filter(scenario == "baseline")
+  cc  <- simulated0 %>% filter(scenario == "climate_change", co2 == 350)
+  cc_co2 <- simulated0 %>% filter(scenario == "climate_change", co2 == 540)
 
-  pct <- function(y) round(100 * (y - ybl) / ybl, 1)
+  # Yield change: climate_change vs baseline, site-year level
+  bl_sy  <- bl  %>% select(x, y, date, yield_bl = Yield_kgha)
+  cc_sy  <- cc  %>% left_join(bl_sy, by = c("x","y","date")) %>%
+                    mutate(pct = (Yield_kgha - yield_bl) / yield_bl * 100)
+  cc2_sy <- cc_co2 %>% left_join(bl_sy, by = c("x","y","date")) %>%
+                       mutate(pct = (Yield_kgha - yield_bl) / yield_bl * 100)
 
-  d_cc  <- pct(ycc);  d_lm <- pct(ylm)
-  d_es  <- pct(yes);  d_cmb <- pct(ycmb)
-  d_add <- d_lm + d_es          # expected if effects were purely additive
-  d_syn <- d_cmb - d_add        # true synergy bonus
+  cat(sprintf("  2°C mean yield change:  %+.1f%%  (range: %.1f%% to %+.1f%%)\n",
+              mean(cc_sy$pct,  na.rm=TRUE),
+              min(cc_sy$pct,   na.rm=TRUE),
+              max(cc_sy$pct,   na.rm=TRUE)))
+  cat(sprintf("  Baseline median yield:  %.0f kg/ha\n",
+              median(bl$Yield_kgha, na.rm=TRUE)))
+  cat(sprintf("  Baseline yield range:   %.0f – %.0f kg/ha\n",
+              min(bl$Yield_kgha, na.rm=TRUE), max(bl$Yield_kgha, na.rm=TRUE)))
 
-  cat(paste(rep("═", 65), collapse = ""), "\n")
-  cat("FIG05 — SYNERGISTIC YIELD EFFECTS (CO2 = 350 ppm, vs baseline)\n")
-  cat(paste(rep("─", 65), collapse = ""), "\n")
-  cat(sprintf("  Baseline (MG4, May-22, current climate): %.0f kg/ha\n\n", ybl))
-  cat(sprintf("  %-38s  %+5.1f%%  (%+.0f kg/ha)\n",
-              "2°C-increase (MG4, May-22, +2°C):",       d_cc,  ycc - ybl))
-  cat(sprintf("  %-38s  %+5.1f%%  (%+.0f kg/ha)\n",
-              "Late-Maturing alone (MG5, May-22, +2°C):", d_lm,  ylm - ybl))
-  cat(sprintf("  %-38s  %+5.1f%%  (%+.0f kg/ha)\n",
-              "Early Sowing alone (MG4, Apr-24, +2°C):",  d_es,  yes - ybl))
-  cat(sprintf("  %-38s  %+5.1f%%  (%+.0f kg/ha)\n",
-              "LM + ES combined (MG5, Apr-24, +2°C):",    d_cmb, ycmb - ybl))
-  cat(paste(rep("─", 65), collapse = ""), "\n")
-  cat(sprintf("  Expected additive (LM + ES):             %+5.1f%%\n", d_add))
-  cat(sprintf("  Observed combined:                       %+5.1f%%\n", d_cmb))
-  cat(sprintf("  ► Synergy bonus:                         %+5.1f%%  (%.1fx additive)\n",
+  # Temperature slope (kg/ha per °C) under 2°C scenario
+  lm_all  <- lm(Yield_kgha ~ SeasonMeanT, data = cc)
+  sl_all  <- coef(lm_all)["SeasonMeanT"]
+  sl_pct  <- sl_all / mean(cc$Yield_kgha, na.rm=TRUE) * 100
+  # Warm/Dry subset
+  rain_mu <- mean(cc$SeasonRain, na.rm=TRUE); rain_sd <- sd(cc$SeasonRain, na.rm=TRUE)
+  t_mu    <- mean(cc$SeasonMeanT,na.rm=TRUE); t_sd    <- sd(cc$SeasonMeanT,na.rm=TRUE)
+  cc_wd   <- cc %>% filter(SeasonMeanT > t_mu, SeasonRain < rain_mu)
+  sl_wd   <- coef(lm(Yield_kgha ~ SeasonMeanT, data = cc_wd))["SeasonMeanT"]
+  cat(sprintf("  Temp slope (overall):   %.0f kg/ha/°C  (%.1f%%/°C)\n", sl_all, sl_pct))
+  cat(sprintf("  Temp slope (Warm/Dry):  %.0f kg/ha/°C\n", sl_wd))
+
+  # Elevated CO2 effect
+  cat(sprintf("  Elev CO2 yield change:  %+.1f%%  (range: %+.1f%% to %+.1f%%)\n",
+              mean(cc2_sy$pct, na.rm=TRUE),
+              min(cc2_sy$pct,  na.rm=TRUE),
+              max(cc2_sy$pct,  na.rm=TRUE)))
+
+  ## ── §3.2: Adaptive strategies (CO2 = 350, all vs baseline) ─────────────────
+  cat("\n§3.2  Adaptive strategies (CO2 = 350 ppm, vs baseline)\n\n")
+
+  s350 <- simulated0 %>% filter(co2 == 350)
+  MY   <- function(sc) mean(s350$Yield_kgha[s350$scenario == sc], na.rm=TRUE)
+  MED  <- function(sc) median(s350$Yield_kgha[s350$scenario == sc], na.rm=TRUE)
+
+  ybl  <- MY("baseline"); ycc <- MY("climate_change")
+  ylm  <- MY("longer_mat"); yes <- MY("early_sowing"); ycmb <- MY("early_sowing_longer_mat")
+  pct  <- function(y) round(100*(y - ybl)/ybl, 1)
+
+  d_cc <- pct(ycc); d_lm <- pct(ylm); d_es <- pct(yes); d_cmb <- pct(ycmb)
+  d_add <- d_lm + d_es; d_syn <- d_cmb - d_add
+
+  cat(sprintf("  %-42s  %+5.1f%%  (%+.0f kg/ha)\n",
+              "Baseline:", 0, 0))
+  cat(sprintf("  %-42s  %+5.1f%%  (%+.0f kg/ha)\n",
+              "2°C-increase (no adaptation):", d_cc, ycc - ybl))
+  cat(sprintf("  %-42s  %+5.1f%%  (%+.0f kg/ha)\n",
+              "Late-Maturing alone (MG5, May-22):", d_lm, ylm - ybl))
+  cat(sprintf("  %-42s  %+5.1f%%  (%+.0f kg/ha)\n",
+              "Early Sowing alone (MG4, Apr-24):", d_es, yes - ybl))
+  cat(sprintf("  %-42s  %+5.1f%%  (%+.0f kg/ha)\n",
+              "LM + ES combined (MG5, Apr-24):", d_cmb, ycmb - ybl))
+  cat(paste(rep("─", 70), collapse=""), "\n")
+  cat(sprintf("  Expected additive effect (LM + ES):       %+5.1f%%\n", d_add))
+  cat(sprintf("  Observed combined:                        %+5.1f%%\n", d_cmb))
+  cat(sprintf("  ► Synergy bonus:                          %+5.1f%%  (%.1fx additive)\n",
               d_syn, d_cmb / d_add))
-  cat(sprintf("  ► Warming offset: combined recovers %.0f%% of warming loss\n",
-              100 * (ycmb - ycc) / (ybl - ycc)))
-  cat(paste(rep("═", 65), collapse = ""), "\n\n")
+  cat(sprintf("  ► Combined recovers %.0f%% of warming loss\n",
+              100*(ycmb - ycc) / (ybl - ycc)))
+
+  # % of fields where LM alone is positive
+  lm_fields <- s350 %>%
+    filter(scenario %in% c("baseline","longer_mat")) %>%
+    select(x,y,date,scenario,Yield_kgha) %>%
+    pivot_wider(names_from=scenario, values_from=Yield_kgha) %>%
+    mutate(pct_chg = (longer_mat - baseline)/baseline*100) %>%
+    group_by(x,y) %>% summarise(mean_chg = mean(pct_chg, na.rm=TRUE), .groups="drop")
+  cat(sprintf("\n  LM alone: %.0f%% of fields show positive yield change\n",
+              100*mean(lm_fields$mean_chg > 0, na.rm=TRUE)))
+
+  # Combined + elevated CO2
+  cmb_co2 <- simulated0 %>%
+    filter(scenario == "early_sowing_longer_mat", co2 == 540) %>%
+    left_join(bl_sy, by = c("x","y","date")) %>%
+    mutate(pct = (Yield_kgha - yield_bl)/yield_bl*100)
+  cat(sprintf("  LM+ES + elevated CO2: mean %+.0f%%  (range: %+.0f%% to %+.0f%%)\n",
+              mean(cmb_co2$pct, na.rm=TRUE),
+              min(cmb_co2$pct,  na.rm=TRUE),
+              max(cmb_co2$pct,  na.rm=TRUE)))
+
+  cat(paste(rep("═", 70), collapse = ""), "\n\n")
 }
 
-## ── Stats for section 3.2: Adaptive strategies ──────────────────────────────
+## ── STATS 1b: §3.2 detailed field-level breakdown (CO2=350) ─────────────────
+## Supplements STATS 1 above with field-level medians, IQR, seed-fill and
+## crop-cycle durations — used for discussion paragraph precision.
 ## Compares each adaptation scenario against:
 ##   (a) baseline         → overall yield recovery relative to no-warming
 ##   (b) climate_change   → incremental gain from each adaptation strategy
-## CO2 = 350 only (without elevated CO2) for clean strategy comparisons.
 
 s32_base <- simulated0 %>%
   filter(scenario == "baseline") %>%
@@ -624,7 +743,9 @@ s32_fields %>%
 cat(paste(rep("─", 65), collapse = ""), "\n\n")
 
 
-## ── Figure 6: Environmental characterization ─────────────────────────── ----
+## ── SUPP FIG S3: Environmental characterization ──────────────────────── ----
+## Paper: Figure S3 — "Environmental characterization of baseline conditions
+##        across all studied site-years (A) and calendar days to flower (B)"
 ## A: Weather space (temperature vs rainfall) with APSIM phenology response curve
 ## B: Days to flowering by weather class, baseline vs +2°C
 
@@ -688,6 +809,11 @@ plot6 <- p6_weather %>%
 ggsave("figures/fig06 - environmental characterization.tiff", plot = plot6,
        width = 20, height = 15, units = "cm", dpi = 600, compression = "lzw", bg = "white")
 
+
+## ══════════════════════════════════════════════════════════════════════════════
+## ADDITIONAL / DIAGNOSTIC FIGURES — not cited in current paper version
+## (may support reviewer responses or future manuscript sections)
+## ══════════════════════════════════════════════════════════════════════════════
 
 ## ── Figure 7: Seed-filling duration distribution ─────────────────────── ----
 ## Ridgeline density by scenario and CO2 level

@@ -161,37 +161,49 @@ doy_labels <- c("100\n(Apr 10)", "110\n(Apr 20)", "120\n(Apr 30)",
                 "160\n(Jun 9)",  "170\n(Jun 19)")
 
 ## ── Figure 1: all years + average, 10% and 50% annotated ────────────────────
-## Text sits above its dashed line (10%: lower-left area; 50%: mid-right area)
+## Annotations placed in empty upper-left space with arrows to curve crossings
+all_10_text_x <- 100;  all_10_text_y <- 50
+all_50_text_x <- 100;  all_50_text_y <- 72
+
 plot_all <- ggplot() +
   geom_line(data = pred_curves,
             aes(x = DOY, y = progress, group = year),
             colour = "grey70", linewidth = 0.55, alpha = 0.7) +
-  geom_hline(yintercept = c(10, 50), linetype = "dashed",
-             colour = "grey40", linewidth = 0.45) +
   geom_line(data = avg_curve, aes(x = DOY, y = progress),
             colour = AVG_COL, linewidth = 1.5) +
-  ## 10% label — placed right of the curve crossing, above the dashed line
-  annotate("text", x = avg_doy_10 + 2, y = 15,
-           label = sprintf("10%% avg: DOY %.0f (%s)", avg_doy_10,
+  ## Arrow: 10% label → average curve crossing
+  annotate("segment",
+           x = all_10_text_x + 7, y = all_10_text_y - 3,
+           xend = avg_doy_10, yend = 14,
+           arrow = arrow(length = unit(0.13, "cm"), type = "closed"),
+           colour = "black", linewidth = 0.45) +
+  ## Arrow: 50% label → average curve crossing
+  annotate("segment",
+           x = all_50_text_x + 17, y = all_50_text_y - 3,
+           xend = avg_doy_50, yend = 51,
+           arrow = arrow(length = unit(0.13, "cm"), type = "closed"),
+           colour = "black", linewidth = 0.45) +
+  annotate("text", x = all_10_text_x, y = all_10_text_y,
+           label = sprintf("10%% planted\nDOY %.0f (%s)", avg_doy_10,
                            format(as.Date(paste0("2023-", round(avg_doy_10)), "%Y-%j"), "%b %d")),
-           hjust = 0, size = 3.0, colour = "black", lineheight = 0.9) +
-  ## 50% label — placed right of the curve crossing, above the dashed line
-  annotate("text", x = avg_doy_50 + 2, y = 55,
-           label = sprintf("50%% avg: DOY %.0f (%s)", avg_doy_50,
+           hjust = 0, size = 2.9, colour = "black", lineheight = 0.95) +
+  annotate("text", x = all_50_text_x, y = all_50_text_y,
+           label = sprintf("50%% planted\nDOY %.0f (%s)", avg_doy_50,
                            format(as.Date(paste0("2023-", round(avg_doy_50)), "%Y-%j"), "%b %d")),
-           hjust = 0, size = 3.0, colour = "black", lineheight = 0.9) +
+           hjust = 0, size = 2.9, colour = "black", lineheight = 0.95) +
   temp +
   theme(panel.background = element_rect(fill = "white"),
-        panel.grid.major = element_line(colour = "grey90")) +
+        panel.grid.major = element_line(colour = "grey90"),
+        axis.text.x = element_text(angle = 35, hjust = 1)) +
   scale_x_continuous(name = "Day of year", breaks = doy_breaks, labels = doy_labels,
                      expand = expansion(mult = c(0.02, 0.05))) +
   scale_y_continuous(name = "Soybean planting progress (%)",
                      limits = c(0, 100), breaks = seq(0, 100, 20))
 
-ggsave("figures/fig_progress_all.tiff", plot = plot_all,
-       width = 16, height = 11, units = "cm",
+ggsave("figures/FigS4-sowing-progress-all-years.tiff", plot = plot_all,
+       width = 14, height = 14, units = "cm",
        dpi = 600, compression = "lzw", bg = "white")
-cat("[Progress] Saved: figures/fig_progress_all.tiff\n")
+cat("[Progress] Saved: figures/FigS4-sowing-progress-all-years.tiff\n")
 
 ## ── Figure 2: last 5 years (same colour) + 5-yr average, arrows + labels ────
 recent_years <- sort(unique(params_df$year), decreasing = TRUE)[seq_len(N_RECENT)]
@@ -255,16 +267,17 @@ plot_recent <- ggplot() +
            hjust = 0, size = 2.9, colour = "black", lineheight = 0.95) +
   temp +
   theme(panel.background = element_rect(fill = "white"),
-        panel.grid.major = element_line(colour = "grey90")) +
+        panel.grid.major = element_line(colour = "grey90"),
+        axis.text.x = element_text(angle = 35, hjust = 1)) +
   scale_x_continuous(name = "Day of year", breaks = doy_breaks, labels = doy_labels,
                      expand = expansion(mult = c(0.02, 0.05))) +
   scale_y_continuous(name = "Soybean planting progress (%)",
                      limits = c(0, 100), breaks = seq(0, 100, 20))
 
-ggsave("figures/fig_progress_recent.tiff", plot = plot_recent,
+ggsave("figures/ExtraFig6-sowing-progress-recent-5yr.tiff", plot = plot_recent,
        width = 16, height = 11, units = "cm",
        dpi = 600, compression = "lzw", bg = "white")
-cat("[Progress] Saved: figures/fig_progress_recent.tiff\n")
+cat("[Progress] Saved: figures/ExtraFig6-sowing-progress-recent-5yr.tiff\n")
 
 ## ── Console summary ───────────────────────────────────────────────────────────
 cat(sprintf("\n── Per-year 50%% and 10%% planting DOY (%d–%d) ──\n",

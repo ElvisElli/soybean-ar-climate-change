@@ -28,6 +28,7 @@
             "[Soybean].Phenology.EmergenceDAS as EmergenceDAS",
             "[Soybean].Phenology.SeedFillingDAS as SeedFillingDAS",
             "[Soybean].Phenology.FloweringDAS as FloweringDAS",
+            " [Soybean].Phenology.StartPodDAS as StartPodDAS",
             "sum of [MicroClimate].RadiationInterception from [Soybean].Sowing to [Soybean].Harvesting as CumRadiationInterception",
             "sum of [MicroClimate].RadiationInterceptionOnGreen from [Soybean].Sowing to [Soybean].Harvesting as CumRadiationInterceptionOnGreen",
             "",
@@ -1274,6 +1275,45 @@
                   "SetEvent": "StartGrainFilling",
                   "ReSetEvent": "never",
                   "Name": "SeedFillingDAS",
+                  "ResourceName": null,
+                  "Children": [
+                    {
+                      "$type": "Models.Memo, Models",
+                      "Text": "\r\nA function is used to provide flowering date as days after sowing(DAS).",
+                      "Name": "memo",
+                      "ResourceName": null,
+                      "Children": [],
+                      "Enabled": true,
+                      "ReadOnly": false
+                    },
+                    {
+                      "$type": "Models.Functions.Constant, Models",
+                      "FixedValue": 0.0,
+                      "Units": null,
+                      "Name": "PreEventValue",
+                      "ResourceName": null,
+                      "Children": [],
+                      "Enabled": true,
+                      "ReadOnly": false
+                    },
+                    {
+                      "$type": "Models.Functions.VariableReference, Models",
+                      "VariableName": "[Plant].DaysAfterSowing",
+                      "Name": "PostEventValue",
+                      "ResourceName": null,
+                      "Children": [],
+                      "Enabled": true,
+                      "ReadOnly": false
+                    }
+                  ],
+                  "Enabled": true,
+                  "ReadOnly": false
+                },
+                {
+                  "$type": "Models.Functions.OnEventFunction, Models",
+                  "SetEvent": "StartPodDevelopment",
+                  "ReSetEvent": "never",
+                  "Name": "StartPodDAS",
                   "ResourceName": null,
                   "Children": [
                     {
@@ -9312,7 +9352,7 @@
           "LineThickness": 0,
           "TableName": "Report",
           "XFieldName": "Clock.Today",
-          "YFieldName": "sWUE",
+          "YFieldName": "StartPodDAS",
           "X2FieldName": null,
           "Y2FieldName": null,
           "ShowInLegend": false,

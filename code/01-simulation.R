@@ -51,27 +51,27 @@ DATE_END   <- "2024-12-31"
 ## ONE-TIME SETUP (new machine):
 ##   1. Run the block below in the R console (select all 8 lines and run):
 ##
-##      local_cache <- "C:/temp/soybean-data"
-##      box_data    <- "C:/Users/efelli/Box/_Projects/Scale-Sims/soybean-ar-climate-change/intermediate-data"
-##      dir.create(local_cache, recursive = TRUE, showWarnings = FALSE)
-##      message("Copying weather files (~5 GB)...")
-##      file.copy(file.path(box_data, "weather"), local_cache, recursive = TRUE)
-##      message("Copying soil files (~5 GB)...")
-##      file.copy(file.path(box_data, "soil"), local_cache, recursive = TRUE)
-##      message("Done — set LOCAL_DATA_CACHE <- local_cache below.")
+##   local_cache <- "C:/temp/soybean-data"
+##   box_data    <- "C:/Users/efelli/Box/_Projects/Scale-Sims/soybean-ar-climate-change/intermediate-data"
+##   dir.create(local_cache, recursive = TRUE, showWarnings = FALSE)
+##   message("Copying weather files (~5 GB)...")
+##   file.copy(file.path(box_data, "weather"), local_cache, recursive = TRUE)
+##   message("Copying soil files (~5 GB)...")
+##   file.copy(file.path(box_data, "soil"), local_cache, recursive = TRUE)
+##   message("Done — set LOCAL_DATA_CACHE <- local_cache below.")
 ##
 ##   2. Set LOCAL_DATA_CACHE below to "C:/temp/soybean-data"
 ##
 ## Set to NULL to use Box Drive (default, slower).
-LOCAL_DATA_CACHE <- NULL
+LOCAL_DATA_CACHE <- "C:/temp/soybean-data"
 
 ## ── Test mode ────────────────────────────────────────────────
 ## Set TEST_RUN <- TRUE for a quick validation before the full run.
 TEST_RUN         <- FALSE
-TEST_N_CELLS     <- 1000          # capped to available data files in cloud
+TEST_N_CELLS     <- 20          # capped to available data files in cloud
 TEST_DATE_START  <- "2015-01-01"
-TEST_DATE_END    <- "2015-12-31"
-TEST_N_SCENARIOS <- 2
+TEST_DATE_END    <- "2016-12-31"
+TEST_N_SCENARIOS <- 9
 
 ## ── Notifications ────────────────────────────────────────────
 ## One-time setup in RStudio console (Windows):
@@ -274,6 +274,7 @@ extract_sim_columns <- function(sim, sc_row, grid_row) {
   )
   keep <- c("Date",
             "EmergenceDAS", "FloweringDAS", "SeedFillingDAS", "MaturityDAS",
+            "StartPodDAS",
             "CumRadiationInterceptionOnGreen",
             "Yield_kgha", "biomass_kgha",
             "SeasonRain", "SeasonRadn",
@@ -669,13 +670,16 @@ tryCatch({
 }, finally = {
   stopCluster(cl)
   cat("\n[CLUSTER] Stopped.\n")
+
+  ## ── Final save (always runs, even on error) ──────────────
+  final.df      <<- dplyr::bind_rows(Filter(Negate(is.null), final.df))
+  total_elapsed <<- round(as.numeric(difftime(Sys.time(), run_started, units = "mins")), 1)
+  saveRDS(final.df, "data/outputs/simulated-scenarios-df.rds")
+  cat(sprintf("[SAVE] %d rows written to data/outputs/simulated-scenarios-df.rds\n",
+              nrow(final.df)))
 })
 
-## ── Final save ───────────────────────────────────────────────
-final.df     <- dplyr::bind_rows(Filter(Negate(is.null), final.df))
-total_elapsed <- round(as.numeric(difftime(Sys.time(), run_started, units = "mins")), 1)
-
-saveRDS(final.df, "data/outputs/simulated-scenarios-df.rds")
+## ── Final save already done in finally block above ───────────
 
 cat(sprintf("\n[DONE] %d rows | %d scenarios | %d cells | %.1f min\n",
             nrow(final.df),
@@ -683,23 +687,14 @@ cat(sprintf("\n[DONE] %d rows | %d scenarios | %d cells | %.1f min\n",
             dplyr::n_distinct(final.df$cellid),
             total_elapsed))
 
-send_notification(
-  subject = sprintf("Soybean sim COMPLETE — %.0f min | %s",
-                    total_elapsed, Sys.info()[["nodename"]]),
-  body    = paste0(
-    "**All scenarios complete!**\n\n",
-    "- Total rows : ", nrow(final.df), "\n",
-    "- Scenarios  : ", dplyr::n_distinct(final.df$scenario), "\n",
-    "- Cells      : ", dplyr::n_distinct(final.df$cellid), "\n",
-    "- Total time : ", total_elapsed, " min\n",
-    "- Output     : data/outputs/simulated-scenarios-df.rds\n\n",
-    "PDFs attached: simulation run report + scientific inspection report.\n",
-    "Machine: ", Sys.info()[["nodename"]]
-  ),
-  attachments = Filter(file.exists, c(
-    "reports/simulation-report.pdf",
-    "reports/inspection-report.pdf"
-  ))
+## Final email is sent by 00-master.R after PDF reports are generated.
+## Store summary stats so master can include them in the notification.
+sim_summary_for_notify <- list(
+  total_rows      = nrow(final.df),
+  n_scenarios     = dplyr::n_distinct(final.df$scenario),
+  n_cells         = dplyr::n_distinct(final.df$cellid),
+  total_elapsed   = total_elapsed,
+  nodename        = Sys.info()[["nodename"]]
 )
 
 ## ── Summary report ───────────────────────────────────────────

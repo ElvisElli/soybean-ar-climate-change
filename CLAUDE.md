@@ -89,7 +89,7 @@ MG-specific cultivars.
 Scenario/treatment: `cultivar`, `sowing`, `scenario`, `climate.control`, `co2`, `rowSpacing`
 Spatial: `x`, `y`, `cellid` (+ any other sim.grid columns)
 Temporal: `date`
-Phenology (DAS): `EmergenceDAS`, `FloweringDAS`, `SeedFillingDAS`, `MaturityDAS`
+Phenology (DAS): `EmergenceDAS`, `FloweringDAS`, `SeedFillingDAS`, `StartPodDAS`, `MaturityDAS`
 Yield: `Yield_kgha`, `biomass_kgha`, `CumRadiationInterceptionOnGreen`
 Weather: `SeasonRain`, `SeasonRadn`, `SeasonMaxt`, `SeasonMint`, `SeasonMeanT`, `BloomingSeasonMaxt`
 Physiology: `Silking_RUE_Temp`, `Silking_Supply_Demand_Ratio`

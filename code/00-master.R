@@ -11,16 +11,17 @@
 ##   3  Inspection report   03-report-scientific.R
 ##   4  Simulation report   04-report-simulation.R
 ##
-## Each phase is skipped automatically if its outputs already exist,
-## unless FORCE_RERUN = TRUE.
+## FORCE_RERUN_SIM     TRUE = delete all checkpoints and re-run APSIM from scratch
+## FORCE_RERUN_OUTPUT  TRUE = re-run phases 2-4 even if output files already exist
 ## ═══════════════════════════════════════════════════════════════════════════
 
 ## ── Settings ─────────────────────────────────────────────────────────────
-FORCE_RERUN   <- TRUE    # TRUE = re-run every phase even if outputs exist
-RUN_SIM       <- TRUE     # Phase 1: APSIM grid simulation
-RUN_ANALYSIS  <- TRUE     # Phase 2: data analysis + manuscript figures
-RUN_REPORT    <- TRUE     # Phase 3: PDF inspection report (scientific)
-RUN_SIM_REPORT <- TRUE    # Phase 4: PDF simulation run report (technical)
+FORCE_RERUN_SIM    <- T  # TRUE = wipe checkpoints and re-run all APSIM simulations
+FORCE_RERUN_OUTPUT <- T   # TRUE = re-run analysis figures and PDF reports
+RUN_SIM            <- T   # Phase 1: APSIM grid simulation
+RUN_ANALYSIS       <- T   # Phase 2: data analysis + manuscript figures
+RUN_REPORT         <- T   # Phase 3: PDF inspection report (scientific)
+RUN_SIM_REPORT     <- T   # Phase 4: PDF simulation run report (technical)
 
 ## ── Helpers ──────────────────────────────────────────────────────────────
 .ts <- function() format(Sys.time(), "%H:%M:%S")
@@ -34,7 +35,7 @@ banner <- function(phase, title) {
 }
 
 run_phase <- function(phase, title, output_check, script) {
-  if (!FORCE_RERUN && all(file.exists(output_check))) {
+  if (!FORCE_RERUN_OUTPUT && all(file.exists(output_check))) {
     cat(sprintf("[%s] Phase %s SKIPPED — outputs already exist: %s\n",
                 .ts(), phase, paste(basename(output_check), collapse = ", ")))
     return(invisible(NULL))
@@ -65,9 +66,12 @@ cat(sprintf("  R version   : %s\n", R.version$version.string))
 cat(sprintf("  Platform    : %s\n\n", R.version$platform))
 
 ## ── Phase 1: Simulation ───────────────────────────────────────────────────
-## Always runs when RUN_SIM = TRUE — the script handles its own resume logic
-## internally via per-chunk checkpoints.
 if (RUN_SIM) {
+  if (FORCE_RERUN_SIM) {
+    cat(sprintf("[%s] FORCE_RERUN_SIM = TRUE — deleting checkpoints for fresh run\n", .ts()))
+    unlink("data/outputs/checkpoints", recursive = TRUE)
+    unlink("data/outputs/sim-run-log.csv")
+  }
   banner("1", "APSIM grid simulation")
   t0 <- proc.time()[["elapsed"]]
   tryCatch(
@@ -86,8 +90,10 @@ if (RUN_ANALYSIS) {
   run_phase(
     phase        = "2",
     title        = "Data analysis & manuscript figures",
-    output_check = c("figures/p1 - climate change without adaptation.tiff",
-                     "figures/p5 - environmental characterization.tiff"),
+    output_check = c("figures/fig01 - climate change without adaptation.tiff",
+                     "figures/fig05 - adaptation strategies merged.tiff",
+                     "figures/fig09 - phenology change maps.tiff",
+                     "figures/fig10 - water use efficiency - sWUE.tiff"),
     script       = "code/02-analysis.R"
   )
 }
@@ -112,11 +118,54 @@ if (RUN_SIM_REPORT) {
   )
 }
 
+## ── Phase 5: PTQ analysis (requires StartPodDAS in simulation output) ────
+## Check column names via RDS header only (avoids reading full 30 MB file)
+.sim_rds <- "data/outputs/simulated-scenarios-df.rds"
+RUN_PTQ  <- file.exists(.sim_rds) &&
+            tryCatch("StartPodDAS" %in% names(readRDS(.sim_rds)),
+                     error = function(e) FALSE)
+if (RUN_PTQ) {
+  run_phase(
+    phase        = "5",
+    title        = "Photothermal Quotient analysis",
+    output_check = c("data/outputs/ptq-results.rds",
+                     "figures/fig11 - ptq map.tiff"),
+    script       = "code/04-ptq-analysis.R"
+  )
+} else {
+  cat(sprintf("[%s] Phase 5 SKIPPED — StartPodDAS not in simulation output yet.\n",
+              .ts()))
+  cat("         Re-run simulation with updated template to enable PTQ analysis.\n\n")
+}
+
 ## ── Summary ───────────────────────────────────────────────────────────────
 cat(paste(rep("═", 72), collapse = ""), "\n")
 cat(sprintf("[%s] All phases complete.\n", .ts()))
 cat(sprintf("  Manuscript figures   : figures/\n"))
 cat(sprintf("  Inspection report    : reports/inspection-report.pdf\n"))
 cat(sprintf("  Simulation report    : reports/simulation-report.pdf\n"))
+cat(sprintf("  PTQ results          : data/outputs/ptq-results.rds\n"))
 cat(sprintf("  Simulation results   : data/outputs/simulated-scenarios-df.rds\n"))
 cat(paste(rep("═", 72), collapse = ""), "\n\n")
+
+## ── Final email notification (after PDFs are ready) ───────────────────────
+if (RUN_SIM && exists("send_notification") && exists("sim_summary_for_notify")) {
+  s <- sim_summary_for_notify
+  send_notification(
+    subject = sprintf("Soybean sim COMPLETE — %.0f min | %s",
+                      s$total_elapsed, s$nodename),
+    body = paste0(
+      "**All scenarios complete — PDFs attached!**\n\n",
+      "- Total rows : ", s$total_rows,      "\n",
+      "- Scenarios  : ", s$n_scenarios,     "\n",
+      "- Cells      : ", s$n_cells,         "\n",
+      "- Total time : ", s$total_elapsed, " min\n",
+      "- Output     : data/outputs/simulated-scenarios-df.rds\n\n",
+      "Machine: ", s$nodename
+    ),
+    attachments = Filter(file.exists, c(
+      "reports/simulation-report.pdf",
+      "reports/inspection-report.pdf"
+    ))
+  )
+}

@@ -67,6 +67,13 @@ if (!is.na(exe)) {
 } else {
   apsimx:::auto_detect_apsimx()
 }
+## Resolved path, captured now so it can be handed explicitly to each
+## PSOCK cluster worker below — workers start as fresh R processes
+## with their own unset apsimx_options(), so reading
+## apsimx::apsimx_options()$exe.path *inside* a worker (instead of
+## passing this master-resolved value in) silently picks up nothing
+## and breaks every APSIM call on that worker.
+resolved_exe_path <- get("exe.path", envir = apsimx:::apsimx.options)
 
 ## ── Make sure the calibration template matches the grid sim ──
 ## Always (re)copy the production template into the optimization
@@ -394,7 +401,8 @@ for (cultivar.name in CONFIG$cultivars) {
   ## optim()/objfun() errors out mid-calibration, so a single bad
   ## cultivar can't leak worker processes into the next iteration.
   op1 <- tryCatch({
-    clusterEvalQ(cl, { library(apsimx); apsimx_options(exe.path = apsimx::apsimx_options()$exe.path) })
+    clusterExport(cl, "resolved_exe_path", envir = environment())
+    clusterEvalQ(cl, { library(apsimx); apsimx_options(exe.path = resolved_exe_path) })
     objfun <- make_objfun(mdat, cultivar.name, cl)
     optim(par = rep(1, 6), fn = objfun, method = "Nelder-Mead",
           starting.values = initial.values, control = list(maxit = CONFIG$maxit))

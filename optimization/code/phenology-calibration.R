@@ -302,8 +302,13 @@ make_objfun <- function(mdat, cultivar.name, cl) {
     ## Push the 6 candidate parameters into the cultivar's Command
     ## list in the shared base file (every worker's copy is made
     ## from this file, so editing it here applies to the whole run).
+    ## NOTE: "Vegetative.Target" (not just "Vegetative") is required
+    ## here — edit_apsimx_replacement() matches `parm` against the
+    ## cultivar's Command lines with grepl(), and the bare substring
+    ## "Vegetative" also matches "VegetativePhotoperiodModifier",
+    ## which makes the match ambiguous and crashes the edit.
     edits <- list(
-      list(parm = "Vegetative", value = phen.parms[1]),
+      list(parm = "Vegetative.Target", value = phen.parms[1]),
       list(parm = "EarlyFlowering", value = phen.parms[2]),
       list(parm = "EarlyGrainFilling", value = phen.parms[3]),
       list(parm = "LateGrainFilling", value = phen.parms[4]),

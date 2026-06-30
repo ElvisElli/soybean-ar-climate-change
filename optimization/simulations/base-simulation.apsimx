@@ -7276,12 +7276,12 @@
                 {
                   "$type": "Models.PMF.Cultivar, Models",
                   "Command": [
-                    "[Phenology].Vegetative.Target.FixedValue =396",
-                    "[Phenology].EarlyFlowering.Target.FixedValue =160",
-                    "[Phenology].EarlyGrainFilling.Target.FractionofGrainfilling.FixedValue =0.072",
-                    "[Phenology].LateGrainFilling.Target.EntireGrainfillPeriod.FixedValue =696",
+                    "[Phenology].Vegetative.Target.FixedValue = 370",
+                    "[Phenology].EarlyFlowering.Target.FixedValue = 100",
+                    "[Phenology].EarlyGrainFilling.Target.FractionofGrainfilling.FixedValue = 0.072",
+                    "[Phenology].LateGrainFilling.Target.EntireGrainfillPeriod.FixedValue = 580",
                     "[Phenology].VegetativePhotoperiodModifier.XYPairs.X = 12.83, 16.13",
-                    "[Phenology].ReproductivePhotoperiodModifier.XYPairs.X =12.83, 16.13",
+                    "[Phenology].ReproductivePhotoperiodModifier.XYPairs.X = 12.83, 16.13",
                     "[Leaf].AreaLargestLeaf.FixedValue=0.007",
                     "[Leaf].Photosynthesis.RUE.FixedValue=1.25"
                   ],

@@ -264,7 +264,16 @@ run_one_sim <- function(id, idat, cultivar.name, worker_dir, sim_dir) {
 ## the original script's serial for-loop.
 run_cultivar_parallel <- function(mdat, cultivar.name, cl) {
   ids <- unique(mdat$id)
-  clusterExport(cl, c("run_one_sim", "CONFIG"), envir = environment())
+  ## PSOCK workers are separate R processes that start with an empty
+  ## global environment — a closure defined here would normally
+  ## carry its captured variables (mdat, cultivar.name) along when
+  ## serialized, but because this function's enclosing environment
+  ## chain bottoms out at .GlobalEnv, parallel's serialization
+  ## resolves that reference to the WORKER's (empty) global env
+  ## instead of copying these values across. Every variable the
+  ## parLapply closure below touches must therefore be listed here
+  ## explicitly, not just relied on via lexical scoping.
+  clusterExport(cl, c("run_one_sim", "CONFIG", "mdat", "cultivar.name"), envir = environment())
   res <- parLapply(cl, ids, function(target_id) {
     idat <- mdat[mdat$id == target_id, ]
     try(run_one_sim(target_id, idat, cultivar.name,

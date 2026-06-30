@@ -37,7 +37,14 @@ CONFIG <- list(
   cultivars       = c("PurcellMG4", "PurcellMG5", "PurcellMG6"), # cultivars actually used in the grid sim
   cultivar_mg     = c(PurcellMG4 = 4, PurcellMG5 = 5, PurcellMG6 = 6), # maps cultivar -> observed mg
   cores           = max(1, detectCores(logical = FALSE) - 1),
-  maxit           = 100,
+  ## Each objective-function evaluation reruns every observed
+  ## site/year/planting-date combo (measured ~6.4 min for 168 combos
+  ## on 4 cores here). Nelder-Mead in 6 dimensions needs a 7-point
+  ## initial simplex plus further evals per iteration, so maxit=100
+  ## (the original default) is impractical on modest hardware —
+  ## lower it for a bounded run; raise it again on a faster/more-core
+  ## machine for a fuller search.
+  maxit           = 15,
   out_dir         = "optimization/results"
 )
 

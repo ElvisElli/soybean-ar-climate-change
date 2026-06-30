@@ -1,36 +1,54 @@
 ## ============================================================
 ## APSIM soybean phenology calibration — multi-site, parallel
-## Generalized from optimization-example-caio.R so the same
-## script can be reused for other crops/projects: everything
-## project-specific lives in CONFIG below.
+##
+## Calibrates the phenology parameters of the cultivars that are
+## ACTUALLY used in the grid simulation (PurcellMG4/5/6, defined
+## in the production template templates/soybean-mg4-baseline.apsimx)
+## against multi-site observed phenology data. Using the same
+## template/APSIM version as the grid simulation keeps this
+## calibration consistent with what the manuscript results are
+## actually built on.
+##
+## Generalized so the same script can be reused for other
+## crops/projects: everything project-specific lives in CONFIG.
 ## ============================================================
 
 rm(list = ls())
 
+## ── Libraries ────────────────────────────────────────────────
+## apsimx drives the APSIM Next Gen executable from R; dplyr/parallel
+## are only used for light data wrangling and the worker cluster.
 library(apsimx)
 library(dplyr)
 library(parallel)
 
 ## ── CONFIG ──────────────────────────────────────────────────
-## Edit this block to point the script at a different project.
+## Everything project-specific (paths, node names, which cultivars
+## to calibrate) lives here. To reuse this script for a different
+## crop/project, only this block should need to change.
 
 CONFIG <- list(
-  sim_dir       = "optimization/simulations",     # base-simulation + soil/ + weather/
-  base_file     = "base-simulation.apsimx",
-  raw_dat       = "optimization/raw-data/phenology-all-sites.csv",
-  site_info     = "optimization/raw-data/site-info.csv",
-  cultivar_root = ".Simulations.Replacements.Soybean.Elli",
-  sowing_path   = ".Simulations.Simulation.Field.Sowing",
-  cultivar_prefix = "Elli_",
-  mg_target_range = 7:17,         # index into unique(dat$mg2)
-  cores         = max(1, detectCores(logical = FALSE) - 1),
-  maxit         = 100,
-  out_dir       = "optimization/results"
+  sim_dir         = "optimization/simulations",   # holds base_file + soil/ + weather/
+  base_file       = "base-simulation.apsimx",      # copy of the grid-sim production template
+  raw_dat         = "optimization/raw-data/phenology-all-sites.csv",
+  site_info       = "optimization/raw-data/site-info.csv",
+  cultivar_root   = ".Simulations.Replacements.Soybean.Elli",  # folder holding the cultivars
+  sowing_path     = ".Simulations.Simulation.Field.SowSoybean", # sowing manager (same as grid sim)
+  cultivars       = c("PurcellMG4", "PurcellMG5", "PurcellMG6"), # cultivars actually used in the grid sim
+  cultivar_mg     = c(PurcellMG4 = 4, PurcellMG5 = 5, PurcellMG6 = 6), # maps cultivar -> observed mg
+  cores           = max(1, detectCores(logical = FALSE) - 1),
+  maxit           = 100,
+  out_dir         = "optimization/results"
 )
 
+## Create the output folder up front so later write.csv()/saveRDS()
+## calls never fail on a missing directory.
 if (!dir.exists(CONFIG$out_dir)) dir.create(CONFIG$out_dir, recursive = TRUE)
 
-## ── APSIM exe auto-detect ───────────────────────────────────
+## ── APSIM executable auto-detect ─────────────────────────────
+## Tries the Linux CLI binary installed in this sandbox first,
+## then falls back to the Windows paths used on the team's
+## desktops, then to apsimx's own auto-detection as a last resort.
 candidate_exes <- c(
   "/usr/local/bin/Models",
   "C:/APSIM2025.10.7895.0/bin/Models.exe",
@@ -43,16 +61,91 @@ if (!is.na(exe)) {
   apsimx:::auto_detect_apsimx()
 }
 
-## ── Load and clean observed data ────────────────────────────
-dat <- read.csv(CONFIG$raw_dat)
-site.info <- read.csv(CONFIG$site_info)
+## ── Make sure the calibration template matches the grid sim ──
+## Always (re)copy the production template into the optimization
+## sandbox before running, so the calibration can never silently
+## drift out of sync with what the grid simulation actually uses.
+grid_template <- normalizePath("templates/soybean-mg4-baseline.apsimx", mustWork = FALSE)
+if (file.exists(grid_template)) {
+  file.copy(grid_template, file.path(CONFIG$sim_dir, CONFIG$base_file), overwrite = TRUE)
+}
+
+## ── Patch the copied template for calibration-only needs ─────
+## The grid-sim template's daily report node (Field.Report) was
+## built for the annual-summary use case and (a) doesn't record
+## phenology stage names, and (b) shares the literal Name "Report"
+## with Simulations.Replacements.Report, which APSIM resolves to
+## the SAME results-database table — so daily rows silently
+## collide with/are shadowed by the other report's annual rows.
+## Neither problem affects the grid simulation itself, so this
+## patch is applied only to our local optimization copy, never to
+## the shared template.
+library(jsonlite)
+patch_report_for_calibration <- function(file) {
+  tpl <- fromJSON(file, simplifyVector = FALSE)
+
+  ## Recursively find the node at Simulations.Simulation.Field.Report
+  find_node <- function(node, target_path, path = "") {
+    nm <- node$Name
+    newpath <- if (nzchar(path)) paste(path, nm, sep = ".") else nm
+    if (identical(newpath, target_path)) return(node)
+    kids <- node$Children
+    if (is.null(kids)) return(NULL)
+    for (i in seq_along(kids)) {
+      hit <- find_node(kids[[i]], target_path, newpath)
+      if (!is.null(hit)) return(list(hit = hit, parent = node, idx = i))
+    }
+    NULL
+  }
+
+  ## Walk again, this time mutating in place via recursive rebuild.
+  patch_node <- function(node, path = "") {
+    nm <- node$Name
+    newpath <- if (nzchar(path)) paste(path, nm, sep = ".") else nm
+    if (identical(newpath, "Simulations.Simulation.Field.Report")) {
+      node$Name <- "PhenologyReport"   # avoid table-name collision with Replacements.Report
+      extra <- c("[Soybean].Phenology.Stage",
+                 "[Soybean].Phenology.CurrentPhaseName",
+                 "[Soybean].Phenology.CurrentStageName")
+      existing <- vapply(node$VariableNames, identity, character(1))
+      new_vars <- setdiff(extra, existing)
+      if (length(new_vars) > 0) {
+        node$VariableNames <- c(node$VariableNames[1:2], as.list(new_vars), node$VariableNames[-(1:2)])
+      }
+      return(node)
+    }
+    if (!is.null(node$Children)) {
+      node$Children <- lapply(node$Children, patch_node, path = newpath)
+    }
+    node
+  }
+
+  tpl <- patch_node(tpl)
+  write(toJSON(tpl, auto_unbox = TRUE, null = "null", pretty = TRUE), file)
+}
+patch_report_for_calibration(file.path(CONFIG$sim_dir, CONFIG$base_file))
+
+## ── Load and clean observed phenology data ───────────────────
+## `dat` = one row per observed stage/site/planting-date; merged
+## with site lat/lon so we can drop a known data-quality issue
+## (Southern Hemisphere observations mis-coded against a
+## December cutoff).
+## fileEncoding strips the UTF-8 BOM these CSVs were saved with;
+## without it, read.csv mangles the first column name (site ->
+## X...site) and every merge/subset on `site` below silently
+## fails or no-ops.
+dat <- read.csv(CONFIG$raw_dat, fileEncoding = "UTF-8-BOM")
+site.info <- read.csv(CONFIG$site_info, fileEncoding = "UTF-8-BOM")
 
 dat <- merge(dat, site.info)
 dat <- dat[order(dat$mg), ]
 dat$date <- as.Date(dat$date, "%m/%d/%Y")
 dat <- subset(dat, !(as.numeric(strftime(date, "%m")) == 12 & lat > 0))
 
-## APSIM phenology stage -> Fehr & Caviness stage
+## APSIM internally names phenology stages differently from the
+## standard Fehr & Caviness (1977) soybean staging used in the
+## field observations — this table translates between the two so
+## predicted and observed stages can be matched up below.
 phen.dict <- na.omit(data.frame(
   apsim.phen = c("Sowing", "Germination", "Emergence", "StartFlowering",
                  "StartPodDevelopment", "StartGrainFilling", "EndCanopyDevelopment",
@@ -60,8 +153,11 @@ phen.dict <- na.omit(data.frame(
   fc.phen    = c(NA, NA, "VE", "R1", "R3", "R5", NA, NA, "R6", "R7", "R8")
 ))
 
-## Initial parameter guesses by maturity group (project-specific
-## priors; swap this table out for a different crop/cultivar set)
+## Initial parameter guesses by (rounded) maturity group. These
+## are the starting points `optim()` searches from; only mg 4/5/6
+## are used here since those are the only cultivars in production,
+## but the table is kept full-range so it's easy to calibrate more
+## maturity groups later just by editing CONFIG$cultivars.
 apsim.mg.values <- data.frame(
   mg = 0:8,
   vegetative            = c(320, 340, 348, 380, 388, 396, 404, 416, 430),
@@ -73,10 +169,14 @@ apsim.mg.values <- data.frame(
 )
 
 ## ── Run one site/year/planting-date combo through APSIM ─────
-## `worker_dir` isolates each parallel worker's copy of the base
-## file so concurrent runs don't clobber each other.
+## Each parallel worker gets its OWN copy of the base file
+## (`worker_file` inside `worker_dir`) so concurrent edits/runs
+## from different workers never clobber each other or the shared
+## template that `make_objfun()` edits below.
 run_one_sim <- function(id, idat, cultivar.name, worker_dir, sim_dir) {
 
+  ## Soil profile for this site, with initial water set to DUL
+  ## (drained upper limit) — i.e. simulations start at field capacity.
   site.name <- idat$site[1]
   soil <- readRDS(file.path(sim_dir, "soil", paste0(site.name, ".rds")))
   if (inherits(soil, "list")) soil <- soil[[1]]
@@ -84,17 +184,28 @@ run_one_sim <- function(id, idat, cultivar.name, worker_dir, sim_dir) {
     Thickness = soil$soil$Thickness,
     InitialValues = soil$soil$DUL
   )
-  met <- file.path(sim_dir, "weather", paste0(site.name, ".met"))
+  ## normalizePath() is required here: APSIM resolves relative paths
+  ## against its own working/launch context, not the R process's
+  ## getwd(), so a bare relative path written into the .apsimx file
+  ## fails to resolve once each parallel worker is running in its
+  ## own temp directory.
+  met <- normalizePath(file.path(sim_dir, "weather", paste0(site.name, ".met")))
 
+  ## Make a private working copy of the (already cultivar-edited)
+  ## base file for this specific site/year/planting-date run.
   if (!dir.exists(worker_dir)) dir.create(worker_dir, recursive = TRUE)
   worker_file <- paste0("sim-", gsub("[^A-Za-z0-9]", "_", id), ".apsimx")
   file.copy(file.path(sim_dir, CONFIG$base_file),
             file.path(worker_dir, worker_file), overwrite = TRUE)
 
+  ## Simulation window: start 90 days before sowing (to allow soil
+  ## equilibration) and end 30 days after the latest observed stage.
   start.date <- as.character(idat$pd[1] - 90)
   end.date   <- as.character(max(idat$date) + 30)
   sim.pd     <- strftime(unique(idat$pd), "%b-%d")
 
+  ## Point the clock, sowing manager, and weather node at this run's
+  ## specific site/cultivar/planting-date before executing APSIM.
   edit_apsimx(file = worker_file, src.dir = worker_dir, wrt.dir = worker_dir,
               node = "Clock", parm = "Start", value = start.date,
               verbose = FALSE, overwrite = TRUE)
@@ -113,6 +224,22 @@ run_one_sim <- function(id, idat, cultivar.name, worker_dir, sim_dir) {
                                     wrt.dir = worker_dir, soil.profile = soil,
                                     verbose = FALSE, overwrite = TRUE)
 
+  ## The template's "Harvest by min temp" manager force-ends the
+  ## crop once the rolling 5-day mean MinT drops below -2 C — this
+  ## is meant to catch an autumn cold snap *after* a normal-season
+  ## crop has matured. Our 90-day pre-sowing buffer (above) means
+  ## that rolling average is often still carrying winter
+  ## temperatures right when an early/atypical observed planting
+  ## date is sown, which forces instant maturity on day 1. The grid
+  ## simulation never hits this (it only ever sows in mid-May), so
+  ## disabling it here is calibration-only and does not affect the
+  ## production template.
+  edit_apsimx(file = worker_file, src.dir = worker_dir, wrt.dir = worker_dir,
+              node = "Other", parm.path = ".Simulations.Simulation.Field.Harvest by min temp",
+              parm = "Threshold", value = -50, verbose = FALSE, overwrite = TRUE)
+
+  ## Run APSIM itself; `cleanup = TRUE` removes the .db apsimx
+  ## creates per run so worker dirs don't fill up with DB files.
   sim0 <- try(apsimx(file = worker_file, src.dir = worker_dir, cleanup = TRUE),
               silent = TRUE)
   file.remove(file.path(worker_dir, worker_file))
@@ -123,8 +250,12 @@ run_one_sim <- function(id, idat, cultivar.name, worker_dir, sim_dir) {
   sim0
 }
 
-## ── Run all id's for one maturity group, in parallel ────────
-run_mg_parallel <- function(mdat, cultivar.name, cl) {
+## ── Run all site/year/planting-date combos for one cultivar ──
+## This is the parallel fan-out: every `id` (site x year x
+## planting-date) is an independent APSIM run, so they're
+## distributed across the cluster `cl` with parLapply instead of
+## the original script's serial for-loop.
+run_cultivar_parallel <- function(mdat, cultivar.name, cl) {
   ids <- unique(mdat$id)
   clusterExport(cl, c("run_one_sim", "CONFIG"), envir = environment())
   res <- parLapply(cl, ids, function(target_id) {
@@ -139,20 +270,38 @@ run_mg_parallel <- function(mdat, cultivar.name, cl) {
   do.call(rbind, res)
 }
 
-## ── Objective function: predicted vs observed DOY (RSS) ─────
-## Kept on the original days/DOY basis for now; swap `metric()`
-## below for a development-rate objective (e.g. 1/DAS per stage)
-## without touching the rest of the pipeline.
+## ── Objective function ───────────────────────────────────────
+## `metric()` is intentionally factored out: it currently scores
+## fit on day-of-year (DOY) error, matching the original
+## calibration. To address the reviewer's request for a
+## development-rate-based objective instead of a days-based one,
+## only this function needs to change (e.g. compare 1/DAS rates
+## per stage instead of raw DOY).
 metric <- function(predicted_doy, observed_doy) {
   log(sum((predicted_doy - observed_doy)^2, na.rm = TRUE))
 }
 
+## `make_objfun()` returns a closure `optim()` can call directly:
+## it edits the cultivar's phenology parameters in the shared base
+## file, reruns every site/year/planting-date combo for that
+## cultivar, lines predicted up against observed DOY, and scores
+## the fit with `metric()`.
 make_objfun <- function(mdat, cultivar.name, cl) {
   function(parms, starting.values) {
+    ## `parms` are multipliers on the starting values — this is
+    ## how the original script kept all 6 parameters on a similar
+    ## (~1) scale for Nelder-Mead, despite spanning days, fractions,
+    ## and photoperiod hours.
     phen.parms <- parms * starting.values
     ns <- paste(CONFIG$cultivar_root, cultivar.name, sep = ".")
+
+    ## Reject parameter sets where late-grain-fill target would be
+    ## shorter than early-grain-fill target — physically invalid.
     if (phen.parms[6] <= phen.parms[5]) return(NA)
 
+    ## Push the 6 candidate parameters into the cultivar's Command
+    ## list in the shared base file (every worker's copy is made
+    ## from this file, so editing it here applies to the whole run).
     edits <- list(
       list(parm = "Vegetative", value = phen.parms[1]),
       list(parm = "EarlyFlowering", value = phen.parms[2]),
@@ -169,9 +318,15 @@ make_objfun <- function(mdat, cultivar.name, cl) {
                                verbose = FALSE, overwrite = TRUE)
     }
 
-    mg.res <- run_mg_parallel(mdat, cultivar.name, cl)
+    ## Rerun every observed site/year/planting-date for this
+    ## cultivar with the candidate parameters in place.
+    mg.res <- run_cultivar_parallel(mdat, cultivar.name, cl)
     if (is.null(mg.res)) return(NA)
 
+    ## Translate APSIM's predicted stage names to Fehr & Caviness
+    ## stages, then join predicted dates to observed dates on
+    ## (site/year/planting-date, stage) so each comparison is like
+    ## for like.
     mg.res <- merge(phen.dict, mg.res,
                      by.x = "apsim.phen", by.y = "Soybean.Phenology.CurrentStageName")
     comb <- merge(mdat, mg.res, by.x = c("id", "phenology"), by.y = c("id", "fc.phen"))
@@ -185,26 +340,38 @@ make_objfun <- function(mdat, cultivar.name, cl) {
   }
 }
 
-## ── Main loop over maturity groups ───────────────────────────
+## ── Main loop: calibrate each production cultivar in turn ────
+## One cultivar at a time (not in parallel across cultivars)
+## because each cultivar's own `optim()` call already parallelizes
+## across all of that cultivar's site/year/planting-date runs —
+## doing both at once would oversubscribe the available cores.
 results <- list()
 
-for (mg.tgt in unique(dat$mg2)[CONFIG$mg_target_range]) {
+for (cultivar.name in CONFIG$cultivars) {
 
-  mdat <- subset(dat, mg2 == mg.tgt)
+  ## Subset observed data to this cultivar's maturity group, and
+  ## build a unique run id per site/year/planting-date combo.
+  mg.tgt <- CONFIG$cultivar_mg[[cultivar.name]]
+  mdat <- subset(dat, round(mg) == mg.tgt)
   mdat$year <- as.numeric(strftime(mdat$date, "%Y"))
   mdat$pd <- as.Date(mdat$pd, tryFormats = c("%m/%d/%Y", "%m-%d-%Y"))
   mdat$id <- paste(mdat$site, mdat$year, as.numeric(mdat$pd), sep = "-")
   mdat <- subset(mdat, !is.na(pd))
 
-  cultivar.name <- paste0(CONFIG$cultivar_prefix, mg.tgt)
-  ivi <- which(apsim.mg.values$mg == round(mdat$mg[1], 0))
+  ivi <- which(apsim.mg.values$mg == mg.tgt)
   initial.values <- unlist(apsim.mg.values[ivi, -1])
 
-  cat("\n==== Calibrating", cultivar.name, "====\n")
+  cat("\n==== Calibrating", cultivar.name, "(mg =", mg.tgt, ") ====\n")
+  cat("Observations:", length(unique(mdat$id)), "site/year/planting-date combos\n")
 
+  ## One cluster per cultivar, sized to the number of distinct runs
+  ## (no point starting more workers than there is work for).
   ncores <- min(CONFIG$cores, length(unique(mdat$id)))
   cl <- makeCluster(max(1, ncores))
 
+  ## tryCatch + finally guarantees stopCluster() runs even if
+  ## optim()/objfun() errors out mid-calibration, so a single bad
+  ## cultivar can't leak worker processes into the next iteration.
   op1 <- tryCatch({
     clusterEvalQ(cl, { library(apsimx); apsimx_options(exe.path = apsimx::apsimx_options()$exe.path) })
     objfun <- make_objfun(mdat, cultivar.name, cl)
@@ -215,6 +382,9 @@ for (mg.tgt in unique(dat$mg2)[CONFIG$mg_target_range]) {
     NULL
   }, finally = stopCluster(cl))
 
+  ## Save this cultivar's fitted coefficients immediately (not just
+  ## at the very end) so a crash partway through the loop doesn't
+  ## lose already-completed calibrations.
   if (!is.null(op1)) {
     coef.df <- data.frame(cultivar = cultivar.name,
                            parameter = names(initial.values),
@@ -227,6 +397,7 @@ for (mg.tgt in unique(dat$mg2)[CONFIG$mg_target_range]) {
   }
 }
 
+## ── Combine and save final results ───────────────────────────
 final.coefs <- do.call(rbind, results)
 saveRDS(final.coefs, file.path(CONFIG$out_dir, "all-coefficients.rds"))
 write.csv(final.coefs, file.path(CONFIG$out_dir, "all-coefficients.csv"), row.names = FALSE)

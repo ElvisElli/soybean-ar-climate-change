@@ -1,0 +1,89 @@
+
+## Script name: weather in Arkansas
+
+## Script objective: ====
+
+## Author: Elvis F. Elli ====
+
+## Script was created on: 2024-06-05====
+
+## Cleaning up environment ====
+rm(list=ls())
+
+## Libraries ====
+library(rstudioapi)
+library(tidyverse)
+library(readxl)
+library(apsimx)
+
+## Set working directory ====
+setwd(dirname(getActiveDocumentContext()$path))
+
+#apsimx_options(exe.path = 'C:\\Users\\efelli\\AppData\\Local\\Programs\\APSIM2025.3.7681.0\\bin\\Models.exe')
+
+apsim_version(which = c("inuse"))
+
+
+obs.soy.data <- read_excel("measured.xlsx",sheet = "MG4v2") %>% as.data.frame()
+obs.soy.data$Date <- as.Date(obs.soy.data$Date)
+
+str(obs.soy.data)
+
+obs.soy.data$Date <- as.Date(obs.soy.data$Date)
+obs.soy.data$Date <- as.POSIXct(obs.soy.data$Date, tz = "UTC")
+
+ggplot(obs.soy.data, aes(Date, Soybean.Phenology.Stage)) + 
+  geom_line()
+
+sim0 <- apsimx("fayetteville.apsimx", value = "report")
+str(sim0)
+
+## phenology
+ggplot() + 
+  geom_point(data = obs.soy.data, aes(x = Date, y = Soybean.Phenology.Stage)) +
+  geom_line(data = sim0, aes(x = Date, y = Soybean.Phenology.Stage)) + 
+  ggtitle("Phenology")
+
+## Finding phenology
+inspect_apsimx_replacement("fayetteville.apsimx",
+                           node = "Soybean", 
+                           node.child = "ElliOpt",
+                           node.subchild = "Elli_MG4",
+                           verbose = FALSE)
+
+#inspect_apsimx_replacement("fayetteville.apsimx",
+#                           node = "Soybean", 
+#                           node.child = "Leaf",
+#                           node.subchild = "Photosynthesis",
+#                           node.subsubchild = "RUE", 
+#                           parm = "FixedValue",
+#                           verbose = FALSE)
+
+## Constructing the paths is straight-forward
+
+pp1 <- "Soybean.ElliOp.Elli_MG4.Vegetative"
+
+#pp1 <- "Soybean.Leaf.Photosynthesis.RUE.FixedValue"
+
+wop <- optim_apsimx("fayetteville.apsimx", 
+                    parm.paths = c(pp1),
+                    data = obs.soy.data,
+                    weights = "mean",
+                    index = c("Date","SimulationName"),
+                    replacement = c(TRUE),
+                    initial.values = c(388))
+
+wop
+
+
+
+sim.opt <- apsimx("Wheat-opt-ex.apsimx", value = "report")  
+
+sim.opt.s <- subset(sim.opt, 
+                    Date > as.Date("2016-09-30") & Date < as.Date("2017-07-01"))
+## phenology
+ggplot() + 
+  geom_point(data = obsWheat, aes(x = Date, y = Wheat.Phenology.Stage)) +
+  geom_line(data = sim.opt.s, aes(x = Date, y = Wheat.Phenology.Stage)) + 
+  ggtitle("Phenology")
+names(sim0)

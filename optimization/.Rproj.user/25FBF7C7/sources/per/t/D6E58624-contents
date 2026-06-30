@@ -1,0 +1,55 @@
+library(apsimx)
+library(ggplot2)
+
+apsimx_options(exe.path = 'C:/APSIM2025.10.7895.0/bin/Models.exe')
+
+
+dat <- read.csv(file = './phenology-all-sites.csv')
+
+summary(dat) 
+
+
+for (mg.tgt in unique(dat$mg2)){
+  mdat <- subset(dat, mg2 == mg.tgt)
+  mdat$year <- as.numeric(strftime(as.Date(mdat$date, '%m/%d/%Y'), '%Y'))
+  
+  mdat$id<- paste(mdat$site, mdat$year, mdat$pd, sep = '-')
+  for (i in unique(mdat$id)){
+    idat <- subset(mdat, id == i )
+    
+    ## here we will update the apsim file to represent
+    ##our simulation
+    
+    pp1 <- '.Simulations.Simulation.Field.Sowing'
+    cultivar.name <- paste0('Elli_', mg.tgt)
+    sim.pd <- strftime(unique(as.Date(idat$pd, '%m/%d/%Y')), '%b-%d')
+    
+    
+    edit_apsimx(file = 'base-simulation.apsimx',
+                parm.path = pp1,
+                node = 'Other',
+                parm = 'CultivarName',
+                value = cultivar.name,
+                overwrite = TRUE)
+    
+    edit_apsimx(file = 'base-simulation.apsimx',
+                parm.path = pp1,
+                node = 'Other',
+                parm = 'SowDate',
+                value = sim.pd,
+                overwrite = TRUE)
+    
+    test <- apsimx('base-simulation.apsimx',
+                   cleanup = TRUE)
+    
+    
+    
+    
+    
+  }
+  
+  
+}
+
+
+

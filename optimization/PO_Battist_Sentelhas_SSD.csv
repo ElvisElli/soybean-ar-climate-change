@@ -1,0 +1,12 @@
+SimulationName,Site,Planting_date,DOY,DaysToVE,DaysToR1,DaysToR3,DaysToR5,DaysToR6,DaysToR7,Yield
+EFredericoWest_Sentelhas_late6_1,Frederico WestphalenBR,10/1/2013,274,10,48,79,93,114,142,3590.4
+EFredericoWest_Sentelhas_late6_2,Frederico WestphalenBR,10/18/2013,291,10,46,65,88,103,125,3331.15
+EFredericoWest_Sentelhas_late6_3,Frederico WestphalenBR,11/8/2013,312,8,48,60,81,95,108,2288.2
+EFredericoWest_Sentelhas_late6_4,Frederico WestphalenBR,11/25/2013,329,6,44,65,79,90,112,2588.25
+EFredericoWest_Sentelhas_late6_5,Frederico WestphalenBR,12/12/2013,346,12,49,60,76,95,108,2740.4
+ELondrina_Sentelhas_late6_1,LondrinaBR,10/10/2013,283,7,53,NA,66,NA,118,3120.775
+ELondrina_Sentelhas_late6_2,LondrinaBR,10/31/2013,304,5,37,48,69.5,NA,106.5,2428.875
+ELondrina_Sentelhas_late6_3,LondrinaBR,11/19/2013,323,6,NA,52,63,NA,111,1832.175
+EPiracicaba_Sentelhas_late6_1,PiracicabaBR,10/18/2013,291,6.5,37,55,68,100,109,3544.075
+EPiracicaba_Sentelhas_late6_2,PiracicabaBR,11/14/2013,318,15,45,64,74,105,101,3314.575
+EPiracicaba_Sentelhas_late6_3,PiracicabaBR,1/8/2014,8,9,35,46,60,88.5,79.5,2427.6

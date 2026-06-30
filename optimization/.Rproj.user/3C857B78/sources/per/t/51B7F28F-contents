@@ -1,0 +1,229 @@
+library(apsimx)
+library(ggplot2)
+
+apsimx_options(exe.path = 'C:/APSIM2025.10.7895.0/bin/Models.exe')
+
+apsimx_options(exe.path = 'C:/PROGRA~1/APSIM2025.10.7895.0/bin/Models.exe')
+apsimx:::auto_detect_apsimx()
+
+
+dat <- read.csv(file = './raw-data/phenology-all-sites.csv')
+dat$lon <- ifelse(dat$lon > 0, dat$lon * -1, dat$lon)
+
+summary(dat) 
+
+
+## Downloading soil and weather information
+if (FALSE){
+  
+  site.info <- unique(dat[c('site', 'lat', 'lon')])
+  
+  for (i in 1:nrow(site.info)){
+    
+    pwr <- get_power_apsim_met(unlist(site.info[i, c('lon', 'lat')]),
+                               c('1990-01-01', '2024-12-31'))
+    
+    soil <- try(get_ssurgo_soil_profile(unlist(site.info[i, c('lon', 'lat')])),
+                silent = TRUE)
+    if (inherits(soil, 'try-error')){
+      soil <- try(get_isric_soil_profile(unlist(site.info[i, c('lon', 'lat')])),
+                  silent = TRUE)
+    }
+    
+    saveRDS(soil, paste0('./simulations/soil/', 
+                         site.info$site[i],
+                         '.rds'))
+    saveRDS(pwr, paste0('./simulations/weather/', 
+                        site.info$site[i],
+                        '.rds'))
+    
+    
+    
+    
+  }
+  
+  
+}
+
+
+
+
+for (mg.tgt in unique(dat$mg2)){
+  mdat <- subset(dat, mg2 == mg.tgt)
+  mdat$date <- as.Date(mdat$date, '%m/%d/%Y')
+  mdat$year <- as.numeric(strftime(mdat$date, '%Y'))
+  mdat$id<- paste(mdat$site, mdat$year, mdat$pd, sep = '-')
+  cultivar.name <- paste0('Elli_', mg.tgt)
+  
+  
+  
+  run_mg <- function(mdat){
+    mg.res <- vector('list', length(unique(mdat$id)))
+    names(mg.res) <- unique(mdat$id)
+    
+    for (i in unique(mdat$id)){
+      idat <- subset(mdat, id == i )
+      
+      site.name <- idat$site[1]
+      soil <- readRDS(paste0('./simulations/soil/', site.name, '.rds'))
+      if(inherits(soil, 'try-error'))
+        next
+      
+      if(inherits(soil, 'list'))
+        soil <- soil[[1]]
+      soil$initialwater <- initialwater_parms(
+        Thickness = soil$soil$Thickness,
+        InitialValues = soil$soil$DUL)
+      
+      met <- paste0('./weather/', site.name, '.met')
+      
+      ## here we will update the apsim file to represent
+      ## our simulation
+      
+      pp1 <- '.Simulations.Simulation.Field.Sowing'
+      sim.pd <- strftime(unique(as.Date(idat$pd, '%m/%d/%Y')), '%b-%d')
+      
+      edit_apsimx(file = 'base-simulation.apsimx',
+                  src.dir = './simulations/',
+                  wrt.dir = './simulations/',
+                  parm.path = pp1,
+                  node = 'Other',
+                  parm = 'CultivarName',
+                  verbose = FALSE,
+                  value = cultivar.name,
+                  overwrite = TRUE)
+      
+      edit_apsimx(file = 'base-simulation.apsimx',
+                  src.dir = './simulations/',
+                  wrt.dir = './simulations/',
+                  parm.path = pp1,
+                  node = 'Other',
+                  parm = 'SowDate',
+                  verbose = FALSE,
+                  value = sim.pd,
+                  overwrite = TRUE)
+      
+      edit_apsimx(file = 'base-simulation.apsimx',
+                  src.dir = './simulations/',
+                  wrt.dir = './simulations/',
+                  node = 'Weather',
+                  value = met,
+                  verbose = FALSE,
+                  overwrite = TRUE)
+      
+      edit_apsimx_replace_soil_profile(file = 'base-simulation.apsimx',
+                                       src.dir = './simulations/',
+                                       wrt.dir = './simulations/',
+                                       verbose = FALSE,
+                                       soil.profile = soil,
+                                       overwrite = TRUE)
+      
+      sim0 <- try(apsimx(file = 'base-simulation.apsimx',
+                     src.dir = './simulations/',
+                     cleanup = TRUE),
+                  silent = TRUE)
+      if (inherits(sim0, 'try-error'))
+        next
+      
+      sim0$id <- i
+      row.names(sim0) <- NULL
+      mg.res[[i]] <- sim0
+    }
+    
+    mg.res <- do.call('rbind', mg.res)
+    return(mg.res)
+    
+  }
+  
+  
+  objfun <- function(parms,
+                     starting.values){
+    phen.pamrs <- parms * starting.values
+    ns <- paste0('.Simulations.Replacements.Soybean.Elli.', cultivar.name)
+    
+    edit_apsimx_replacement(file = 'base-simulation.apsimx',
+                            src.dir = './simulations/',
+                            wrt.dir = './simulations/',
+                            root = list("Models.Core.Folder", 1),
+                            verbose = FALSE,
+                            node.string  = ns,
+                            parm = 'Vegetative',
+                            value = phen.pamrs[1],
+                            overwrite = TRUE)
+    
+    edit_apsimx_replacement(file = 'base-simulation.apsimx',
+                            src.dir = './simulations/',
+                            wrt.dir = './simulations/',
+                            root = list("Models.Core.Folder", 1),
+                            verbose = FALSE,
+                            parm = 'EarlyFlowering',
+                            node.string = ns, 
+                            value = phen.pamrs[2],
+                            overwrite = TRUE)
+    
+    edit_apsimx_replacement(file = 'base-simulation.apsimx',
+                            src.dir = './simulations/',
+                            wrt.dir = './simulations/',
+                            parm = 'EarlyGrainFilling',
+                            root = list("Models.Core.Folder", 1),
+                            verbose = FALSE,
+                            node.string = ns, 
+                            value = phen.pamrs[3],
+                            overwrite = TRUE)
+    
+    edit_apsimx_replacement(file = 'base-simulation.apsimx',
+                            src.dir = './simulations/',
+                            wrt.dir = './simulations/',
+                            parm = 'LateGrainFilling',
+                            root = list("Models.Core.Folder", 1),
+                            verbose = FALSE,
+                            node.string = ns, 
+                            value = phen.pamrs[4],
+                            overwrite = TRUE)
+    
+    edit_apsimx_replacement(file = 'base-simulation.apsimx',
+                            src.dir = './simulations/',
+                            wrt.dir = './simulations/',
+                            root = list("Models.Core.Folder", 1),
+                            parm = 'ReproductivePhotoperiodModifier',
+                            verbose = FALSE,
+                            node.string = ns, 
+                            value = paste(phen.pamrs[5], phen.pamrs[6], sep = ', '),
+                            overwrite = TRUE)
+    
+    
+    mg.res <- run_mg(mdat)
+    
+    
+    comb <- merge(mg.res,
+                  mdat,
+                  by.x = c('id', 'Date'),
+                  by.y = c('id', 'date'))
+    
+    plot(comb$phenology.num, comb$Soybean.Phenology.Stage,
+         xlab = 'Observed stage',
+         ylab = 'Simulated stage')
+    abline(0, 1, col = 'red')
+    
+    ## rss
+    rss1 <- sum((comb$phenology.num - comb$Soybean.Phenology.Stage)^2)
+    rss1 <- log(rss1)
+    
+    cat( strftime(Sys.time()), '- ', cultivar.name, ' - ', paste(round(phen.pamrs, 2), collapse = ', '), '- RSS = ', round(rss1, 2), '\n')
+    
+    return(rss1)
+  }
+  
+  
+  
+  op1 <- try(optim(par = rep(1, 6),
+                   fn = objfun,
+                   method = 'Nelder-Mead',
+                   starting.values = c(380, 120, 0.361, 664, 13.4, 16.91)
+  ))
+  
+  
+}
+
+
+

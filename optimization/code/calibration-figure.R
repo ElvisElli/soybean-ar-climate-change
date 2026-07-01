@@ -46,22 +46,32 @@ if (is.null(cal.phen) || is.null(uncal.phen) || nrow(cal.phen) == 0) {
   message("[calibration-figure] No completed cultivar comparison data yet — skipping figure.")
 } else {
 
-  ## Overall (pooled across all 4 groups) RMSE/Bias, same formulas
-  ## used in figure-s1/code/figures.R panel B, for the inset labels.
-  bias.cal <- sum(cal.phen$doy.x - cal.phen$doy.y) / nrow(cal.phen)
-  rmse.cal <- sqrt(sum((cal.phen$doy.x - cal.phen$doy.y)^2) / nrow(cal.phen))
-  rmse.pre <- sqrt(sum((uncal.phen$doy.x - uncal.phen$doy.y)^2) / nrow(uncal.phen))
-  bias.pre <- sum(uncal.phen$doy.x - uncal.phen$doy.y) / nrow(uncal.phen)
-  cal.label <- paste0("Optimized\nRMSE: ", round(rmse.cal, 1), " d\nBias: ", round(bias.cal, 1), " d")
-  pre.label <- paste0("Uncalibrated\nRMSE: ", round(rmse.pre, 1), " d\nBias: ", round(bias.pre, 1), " d")
+  ## Per-cultivar RMSE/Bias (same formulas used in
+  ## figure-s1/code/figures.R panel B), one row per facet, so the
+  ## inset labels can be passed as proper per-panel `data` to
+  ## geom_text() instead of a bare scalar aes() with no data — the
+  ## latter crashes ggplot2 (>= 4.0) under facet_wrap() with
+  ## "subscript out of bounds" because it can't resolve which panel
+  ## a data-less annotation layer belongs to.
+  per_cultivar_stats <- function(d, label_prefix) {
+    do.call(rbind, lapply(split(d, d$cultivar), function(sub) {
+      rmse <- sqrt(sum((sub$doy.x - sub$doy.y)^2) / nrow(sub))
+      bias <- sum(sub$doy.x - sub$doy.y) / nrow(sub)
+      data.frame(cultivar = sub$cultivar[1],
+                 label = paste0(label_prefix, "\nRMSE: ", round(rmse, 1),
+                                 " d\nBias: ", round(bias, 1), " d"))
+    }))
+  }
+  cal.labels   <- per_cultivar_stats(cal.phen, "Optimized")
+  uncal.labels <- per_cultivar_stats(uncal.phen, "Uncalibrated")
 
   p <- ggplot() +
     geom_point(data = uncal.phen, aes(x = doy.y, y = doy.x, fill = "Uncalibrated",
                                        pch = "Uncalibrated", colour = "Uncalibrated")) +
     geom_point(data = cal.phen, aes(x = doy.y, y = doy.x, fill = "Optimized",
                                      pch = "Optimized", colour = "Optimized")) +
-    geom_text(aes(x = Inf, y = -Inf, label = cal.label), vjust = -0.15, hjust = 1.05) +
-    geom_text(aes(x = -Inf, y = Inf, label = pre.label), vjust = 1.15, hjust = -0.05) +
+    geom_text(data = cal.labels, aes(x = Inf, y = -Inf, label = label), vjust = -0.15, hjust = 1.05) +
+    geom_text(data = uncal.labels, aes(x = -Inf, y = Inf, label = label), vjust = 1.15, hjust = -0.05) +
     geom_abline() +
     facet_wrap(~cultivar) +
     labs(x = "Predicted DOY", y = "Observed DOY", fill = "", col = "", shape = "",

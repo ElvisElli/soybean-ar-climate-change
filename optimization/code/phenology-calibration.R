@@ -387,11 +387,74 @@ metric <- function(predicted_doy, observed_doy) {
   log(sum((predicted_doy - observed_doy)^2, na.rm = TRUE))
 }
 
-## `make_objfun()` returns a closure `optim()` can call directly:
-## it edits the cultivar's phenology parameters in the shared base
+## `run_and_compare()` is the shared core behind both the objective
+## function used by `optim()` and the final before/after comparison
+## run below: it edits the cultivar's parameters in the shared base
 ## file, reruns every site/year/planting-date combo for that
-## cultivar, lines predicted up against observed DOY, and scores
-## the fit with `metric()`.
+## cultivar, and returns BOTH the scalar RSS and the full predicted-
+## vs-observed comparison table (`comb`). Keeping these together in
+## one function means the expensive APSIM re-run only ever happens
+## once per parameter set, whether it's called from inside `optim()`
+## or once more afterwards to capture the final calibrated/uncalibrated
+## comparison data used for the 1:1 figure.
+run_and_compare <- function(phen.parms, cultivar.name, cl, mdat) {
+  ns <- paste(CONFIG$cultivar_root, cultivar.name, sep = ".")
+
+  ## Reject parameter sets where late-grain-fill target would be
+  ## shorter than early-grain-fill target, or where either growth
+  ## parameter has gone non-positive — all physically invalid.
+  if (phen.parms[6] <= phen.parms[5]) return(NULL)
+  if (phen.parms[7] <= 0 || phen.parms[8] <= 0) return(NULL)
+
+  ## Push the 8 candidate parameters into the cultivar's Command
+  ## list in the shared base file (every worker's copy is made
+  ## from this file, so editing it here applies to the whole run).
+  ## NOTE: "Vegetative.Target" (not just "Vegetative") is required
+  ## here — edit_apsimx_replacement() matches `parm` against the
+  ## cultivar's Command lines with grepl(), and the bare substring
+  ## "Vegetative" also matches "VegetativePhotoperiodModifier",
+  ## which makes the match ambiguous and crashes the edit.
+  ## "AreaLargestLeaf" and "RUE" are each unique substrings within
+  ## the cultivar's Command list, so no similar ambiguity there.
+  edits <- list(
+    list(parm = "Vegetative.Target", value = phen.parms[1]),
+    list(parm = "EarlyFlowering", value = phen.parms[2]),
+    list(parm = "EarlyGrainFilling", value = phen.parms[3]),
+    list(parm = "LateGrainFilling", value = phen.parms[4]),
+    list(parm = "ReproductivePhotoperiodModifier",
+         value = paste(phen.parms[5], phen.parms[6], sep = ", ")),
+    list(parm = "AreaLargestLeaf", value = phen.parms[7]),
+    list(parm = "RUE", value = phen.parms[8])
+  )
+  for (e in edits) {
+    edit_apsimx_replacement(file = CONFIG$base_file, src.dir = CONFIG$sim_dir,
+                             wrt.dir = CONFIG$sim_dir,
+                             root = list("Models.Core.Folder", 1),
+                             node.string = ns, parm = e$parm, value = e$value,
+                             verbose = FALSE, overwrite = TRUE)
+  }
+
+  ## Rerun every observed site/year/planting-date for this
+  ## cultivar with the candidate parameters in place.
+  mg.res <- run_cultivar_parallel(mdat, cultivar.name, cl)
+  if (is.null(mg.res)) return(NULL)
+
+  ## Translate APSIM's predicted stage names to Fehr & Caviness
+  ## stages, then join predicted dates to observed dates on
+  ## (site/year/planting-date, stage) so each comparison is like
+  ## for like.
+  mg.res <- merge(phen.dict, mg.res,
+                   by.x = "apsim.phen", by.y = "Soybean.Phenology.CurrentStageName")
+  comb <- merge(mdat, mg.res, by.x = c("id", "phenology"), by.y = c("id", "fc.phen"))
+  comb$doy.x <- as.numeric(strftime(comb$date, "%j"))
+  comb$doy.y <- as.numeric(strftime(comb$Date, "%j"))
+
+  list(rss = metric(comb$doy.y, comb$doy.x), comb = comb)
+}
+
+## `make_objfun()` returns a closure `optim()` can call directly:
+## same `run_and_compare()` core as above, but discards `comb` and
+## returns just the scalar RSS `optim()` needs.
 make_objfun <- function(mdat, cultivar.name, cl) {
   function(parms, starting.values) {
     ## `parms` are multipliers on the starting values — this is
@@ -399,61 +462,11 @@ make_objfun <- function(mdat, cultivar.name, cl) {
     ## (~1) scale for Nelder-Mead, despite spanning days, fractions,
     ## photoperiod hours, leaf area (m2), and RUE (g/MJ).
     phen.parms <- parms * starting.values
-    ns <- paste(CONFIG$cultivar_root, cultivar.name, sep = ".")
-
-    ## Reject parameter sets where late-grain-fill target would be
-    ## shorter than early-grain-fill target, or where either growth
-    ## parameter has gone non-positive — all physically invalid.
-    if (phen.parms[6] <= phen.parms[5]) return(NA)
-    if (phen.parms[7] <= 0 || phen.parms[8] <= 0) return(NA)
-
-    ## Push the 8 candidate parameters into the cultivar's Command
-    ## list in the shared base file (every worker's copy is made
-    ## from this file, so editing it here applies to the whole run).
-    ## NOTE: "Vegetative.Target" (not just "Vegetative") is required
-    ## here — edit_apsimx_replacement() matches `parm` against the
-    ## cultivar's Command lines with grepl(), and the bare substring
-    ## "Vegetative" also matches "VegetativePhotoperiodModifier",
-    ## which makes the match ambiguous and crashes the edit.
-    ## "AreaLargestLeaf" and "RUE" are each unique substrings within
-    ## the cultivar's Command list, so no similar ambiguity there.
-    edits <- list(
-      list(parm = "Vegetative.Target", value = phen.parms[1]),
-      list(parm = "EarlyFlowering", value = phen.parms[2]),
-      list(parm = "EarlyGrainFilling", value = phen.parms[3]),
-      list(parm = "LateGrainFilling", value = phen.parms[4]),
-      list(parm = "ReproductivePhotoperiodModifier",
-           value = paste(phen.parms[5], phen.parms[6], sep = ", ")),
-      list(parm = "AreaLargestLeaf", value = phen.parms[7]),
-      list(parm = "RUE", value = phen.parms[8])
-    )
-    for (e in edits) {
-      edit_apsimx_replacement(file = CONFIG$base_file, src.dir = CONFIG$sim_dir,
-                               wrt.dir = CONFIG$sim_dir,
-                               root = list("Models.Core.Folder", 1),
-                               node.string = ns, parm = e$parm, value = e$value,
-                               verbose = FALSE, overwrite = TRUE)
-    }
-
-    ## Rerun every observed site/year/planting-date for this
-    ## cultivar with the candidate parameters in place.
-    mg.res <- run_cultivar_parallel(mdat, cultivar.name, cl)
-    if (is.null(mg.res)) return(NA)
-
-    ## Translate APSIM's predicted stage names to Fehr & Caviness
-    ## stages, then join predicted dates to observed dates on
-    ## (site/year/planting-date, stage) so each comparison is like
-    ## for like.
-    mg.res <- merge(phen.dict, mg.res,
-                     by.x = "apsim.phen", by.y = "Soybean.Phenology.CurrentStageName")
-    comb <- merge(mdat, mg.res, by.x = c("id", "phenology"), by.y = c("id", "fc.phen"))
-    comb$doy.x <- as.numeric(strftime(comb$date, "%j"))
-    comb$doy.y <- as.numeric(strftime(comb$Date, "%j"))
-
-    rss <- metric(comb$doy.y, comb$doy.x)
+    out <- run_and_compare(phen.parms, cultivar.name, cl, mdat)
+    if (is.null(out)) return(NA)
     cat(strftime(Sys.time()), "-", cultivar.name, "-",
-        paste(round(phen.parms, 2), collapse = ", "), "- RSS =", round(rss, 2), "\n")
-    rss
+        paste(round(phen.parms, 2), collapse = ", "), "- RSS =", round(out$rss, 2), "\n")
+    out$rss
   }
 }
 
@@ -490,21 +503,31 @@ for (cultivar.name in CONFIG$cultivars) {
   ## tryCatch + finally guarantees stopCluster() runs even if
   ## optim()/objfun() errors out mid-calibration, so a single bad
   ## cultivar can't leak worker processes into the next iteration.
-  op1 <- tryCatch({
+  ## After optim() converges we reuse the same live cluster to run
+  ## the uncalibrated (starting-value) and calibrated (fitted-value)
+  ## parameter sets ONE more time each, purely to capture the full
+  ## predicted-vs-observed comparison table (`comb`) for the 1:1
+  ## figure — optim() itself only ever returns the scalar RSS.
+  fit <- tryCatch({
     clusterExport(cl, "resolved_exe_path", envir = environment())
     clusterEvalQ(cl, { library(apsimx); apsimx_options(exe.path = resolved_exe_path) })
     objfun <- make_objfun(mdat, cultivar.name, cl)
-    optim(par = rep(1, 8), fn = objfun, method = "Nelder-Mead",
-          starting.values = initial.values, control = list(maxit = CONFIG$maxit))
+    op1 <- optim(par = rep(1, 8), fn = objfun, method = "Nelder-Mead",
+                 starting.values = initial.values, control = list(maxit = CONFIG$maxit))
+
+    uncal <- run_and_compare(as.numeric(initial.values), cultivar.name, cl, mdat)
+    cal   <- run_and_compare(as.numeric(initial.values) * op1$par, cultivar.name, cl, mdat)
+    list(op1 = op1, uncal.comb = uncal$comb, cal.comb = cal$comb)
   }, error = function(e) {
     message("[ERROR] Calibration failed for ", cultivar.name, ": ", e$message)
     NULL
   }, finally = stopCluster(cl))
 
-  ## Save this cultivar's fitted coefficients immediately (not just
-  ## at the very end) so a crash partway through the loop doesn't
-  ## lose already-completed calibrations.
-  if (!is.null(op1)) {
+  ## Save this cultivar's fitted coefficients and comparison data
+  ## immediately (not just at the very end) so a crash partway
+  ## through the loop doesn't lose already-completed calibrations.
+  if (!is.null(fit)) {
+    op1 <- fit$op1
     coef.df <- data.frame(cultivar = cultivar.name,
                            parameter = names(initial.values),
                            initial   = as.numeric(initial.values),
@@ -513,6 +536,12 @@ for (cultivar.name in CONFIG$cultivars) {
     results[[cultivar.name]] <- coef.df
     write.csv(coef.df, file.path(CONFIG$out_dir, paste0(cultivar.name, "-coefficients.csv")),
               row.names = FALSE)
+
+    ## Predicted-vs-observed comparison tables, saved per cultivar so
+    ## the post-run figure script can rbind across all 4 groups and
+    ## reproduce a Figure-S1-style 1:1 plot without re-simulating.
+    saveRDS(fit$uncal.comb, file.path(CONFIG$out_dir, paste0(cultivar.name, "-uncalibrated-phen.rds")))
+    saveRDS(fit$cal.comb,   file.path(CONFIG$out_dir, paste0(cultivar.name, "-calibrated-phen.rds")))
   }
 }
 
@@ -522,3 +551,10 @@ saveRDS(final.coefs, file.path(CONFIG$out_dir, "all-coefficients.rds"))
 write.csv(final.coefs, file.path(CONFIG$out_dir, "all-coefficients.csv"), row.names = FALSE)
 
 cat("\n[DONE] Calibrated", length(results), "cultivars. See", CONFIG$out_dir, "\n")
+
+## ── Final 1:1 figure ───────────────────────────────────────────
+## Built from the per-cultivar comparison tables saved above, in
+## the style of Figure S1 (paper/to-submit). Factored into its own
+## script so it can also be re-run standalone (without repeating
+## the whole calibration) after the fact.
+source("optimization/code/calibration-figure.R")

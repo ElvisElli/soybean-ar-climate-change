@@ -63,6 +63,14 @@ cal.yield <- readRDS('./processed-data/calibrated-yield.rds')
 cal.yield <- cal.yield[order(cal.yield$SoybeanYieldkgha), ]
 cal.yield <- cal.yield[-1*(1:4),]
 
+## --- Outlier filtering for yield plot (panel C) ---
+## Single point sitting well outside the main cloud: observed ~4883 kg/ha
+## vs. simulated ~2566 kg/ha (|error| ~2317 kg/ha, the only calibrated point
+## exceeding 2000 kg/ha error) — removed by id rather than a residual
+## threshold since it is the sole outlier identified visually.
+cal.yield <- cal.yield[cal.yield$id != 'Stoneville-2013-15846', ]
+## --- end outlier filtering ---
+
 uncal.yield <- readRDS('./processed-data/uncalibrated-yield.rds')
 
 

@@ -98,10 +98,12 @@ p <- ggplot()+
   
   geom_point(data = uncal.phen, aes(x = doy.x, y = doy.y, fill = 'Uncalibrated', , pch = 'Uncalibrated', colour = 'Uncalibrated'))+
   geom_point(data = cal.phen, aes(x = doy.x, y = doy.y, fill = 'Optimized', pch = 'Optimized', colour = 'Optimized'))+
+  ## Inset text nudged inward (vjust/hjust beyond 0/1) so labels sit
+  ## just inside the panel border instead of touching it.
   geom_text(aes(x = Inf, y = -Inf, label = cal.label),
-            vjust = -0.1, hjust = 1.1)+
+            vjust = -0.15, hjust = 1.05)+
   geom_text(aes(x = -Inf, y = Inf, label = pre.label),
-            vjust = 1, hjust = 0)+
+            vjust = 1.15, hjust = -0.05)+
   geom_abline()+
   labs( x = 'Predicted DOY', y = 'Observed DOY', 
         fill = '',
@@ -124,10 +126,12 @@ p <- ggplot()+
 p2 <- ggplot()+
   geom_point(data =uncal.yield, aes(x = yield, y = SoybeanYieldkgha, fill = 'Uncalibrated', colour = 'Uncalibrated', shape = 'Uncalibrated'),  cex = 2)+
   geom_point(data = cal.yield, aes(x = yield, y = SoybeanYieldkgha, fill = 'Optimized', colour = 'Optimized', shape = 'Optimized'),  cex = 2)+
+  ## Inset text nudged inward (vjust/hjust beyond 0/1) so labels sit
+  ## just inside the panel border instead of touching it.
   geom_text(aes(x = Inf, y = -Inf, label = ycal.label),
-            vjust = -0.1, hjust = 1.1)+
+            vjust = -0.15, hjust = 1.05)+
   geom_text(aes(x = -Inf, y = Inf, label = ypre.label),
-            vjust = 1, hjust = 0)+
+            vjust = 1.15, hjust = -0.05)+
   geom_abline()+
   labs( x = 'Predicted Yield (kg/ha)', y = 'Observed Yield (kg/ha)', 
         col = '',
@@ -193,10 +197,12 @@ p2 <- ggplot()+
 p3 <- ggplot()+
   geom_point(data = uncal.phen.filt, aes(x = dap.sim, y = dap.obs, fill = 'Uncalibrated', , pch = 'Uncalibrated', colour = 'Uncalibrated'))+
   geom_point(data = cal.phen.filt, aes(x = dap.sim, y = dap.obs, fill = 'Optimized', pch = 'Optimized', colour = 'Optimized'))+
+  ## Inset text nudged inward (vjust/hjust beyond 0/1) so labels sit
+  ## just inside the panel border instead of touching it.
   geom_text(aes(x = Inf, y = -Inf, label = dap.cal.label),
-            vjust = -0.1, hjust = 1.1)+
+            vjust = -0.15, hjust = 1.05)+
   geom_text(aes(x = -Inf, y = Inf, label = dap.pre.label),
-            vjust = 1, hjust = 0)+
+            vjust = 1.15, hjust = -0.05)+
   geom_abline()+
   scale_y_continuous(limits = c(0,200))+
   scale_x_continuous(limits = c(0,200))+

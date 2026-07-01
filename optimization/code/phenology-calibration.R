@@ -1,13 +1,19 @@
 ## ============================================================
 ## APSIM soybean phenology calibration — multi-site, parallel
 ##
-## Calibrates the phenology parameters of the cultivars that are
-## ACTUALLY used in the grid simulation (PurcellMG4/5/6, defined
-## in the production template templates/soybean-mg4-baseline.apsimx)
-## against multi-site observed phenology data. Using the same
-## template/APSIM version as the grid simulation keeps this
-## calibration consistent with what the manuscript results are
+## Calibrates 4 maturity-group subclasses — early4, late4, early5,
+## late5 — matching the classification used in Table S1 of the
+## supplementary material (supp-mat-06-23-2026.docx), against the
+## production grid-sim template (templates/soybean-mg4-baseline.apsimx).
+## Using the same template/APSIM version as the grid simulation keeps
+## this calibration consistent with what the manuscript results are
 ## actually built on.
+##
+## In addition to the 6 phenology parameters calibrated previously,
+## this version also optimizes 2 growth parameters simultaneously
+## (Area of Largest Leaf, Radiation Use Efficiency), per the
+## supplementary methods: "all parameters were optimized
+## simultaneously to potentially capture parameter interactions."
 ##
 ## Generalized so the same script can be reused for other
 ## crops/projects: everything project-specific lives in CONFIG.
@@ -34,12 +40,24 @@ CONFIG <- list(
   site_info       = "optimization/raw-data/site-info.csv",
   cultivar_root   = ".Simulations.Replacements.Soybean.Elli",  # folder holding the cultivars
   sowing_path     = ".Simulations.Simulation.Field.SowSoybean", # sowing manager (same as grid sim)
-  cultivars       = c("PurcellMG4", "PurcellMG5", "PurcellMG6"), # cultivars actually used in the grid sim
-  cultivar_mg     = c(PurcellMG4 = 4, PurcellMG5 = 5, PurcellMG6 = 6), # maps cultivar -> observed mg
+  ## The 4 maturity-group subclasses from Table S1. These cultivar
+  ## nodes don't exist in the production template yet — they're
+  ## cloned from the nearest existing MG4/MG5 cultivar by
+  ## clone_calibration_cultivars() below, purely inside our local
+  ## calibration copy (never touches the shared template).
+  cultivars       = c("EarlyMG4", "LateMG4", "EarlyMG5", "LateMG5"),
+  ## Maps each calibration cultivar -> (a) the mg2 label used to
+  ## subset observed data, and (b) the existing production cultivar
+  ## its Command block (and therefore its Cultivar node scaffold) is
+  ## cloned from.
+  cultivar_mg2    = c(EarlyMG4 = "early4", LateMG4 = "late4",
+                       EarlyMG5 = "early5", LateMG5 = "late5"),
+  cultivar_clone_source = c(EarlyMG4 = "PurcellMG4", LateMG4 = "PurcellMG4",
+                             EarlyMG5 = "PurcellMG5", LateMG5 = "PurcellMG5"),
   cores           = max(1, detectCores(logical = FALSE) - 1),
   ## Each objective-function evaluation reruns every observed
   ## site/year/planting-date combo (measured ~6.4 min for 168 combos
-  ## on 4 cores here). Nelder-Mead in 6 dimensions needs a 7-point
+  ## on 4 cores here). Nelder-Mead in 8 dimensions needs a 9-point
   ## initial simplex plus further evals per iteration, so maxit=100
   ## (the original default) is impractical on modest hardware —
   ## lower it for a bounded run; raise it again on a faster/more-core
@@ -139,6 +157,57 @@ patch_report_for_calibration <- function(file) {
 }
 patch_report_for_calibration(file.path(CONFIG$sim_dir, CONFIG$base_file))
 
+## ── Clone the 4 calibration cultivars into the local copy ────
+## The production template only defines PurcellMG4/5/6 — it has no
+## early4/late4/early5/late5 subclasses. We clone each target
+## cultivar from its nearest existing production cultivar (same
+## $type/Command scaffold, just a new Name) and append it under
+## Replacements.Soybean.Elli, purely in this local calibration
+## copy. No GUID/ID field exists on Cultivar nodes in this APSIM
+## version, so a name change is a safe, complete clone.
+clone_calibration_cultivars <- function(file) {
+  tpl <- fromJSON(file, simplifyVector = FALSE)
+
+  find_node <- function(node, target_name, path = "") {
+    nm <- node$Name
+    newpath <- if (nzchar(path)) paste(path, nm, sep = ".") else nm
+    if (identical(nm, target_name)) return(node)
+    kids <- node$Children
+    if (is.null(kids)) return(NULL)
+    for (k in kids) {
+      hit <- find_node(k, target_name, newpath)
+      if (!is.null(hit)) return(hit)
+    }
+    NULL
+  }
+
+  add_clones <- function(node, path = "") {
+    nm <- node$Name
+    newpath <- if (nzchar(path)) paste(path, nm, sep = ".") else nm
+    if (identical(newpath, "Simulations.Replacements.Soybean.Elli")) {
+      existing_names <- vapply(node$Children, function(c) c$Name, character(1))
+      for (new.name in CONFIG$cultivars) {
+        if (new.name %in% existing_names) next  # already present (re-run safety)
+        src.name <- CONFIG$cultivar_clone_source[[new.name]]
+        src.node <- find_node(tpl, src.name)
+        if (is.null(src.node)) stop("Clone source cultivar not found: ", src.name)
+        clone <- src.node       # R copy-on-modify: this is an independent deep copy
+        clone$Name <- new.name
+        node$Children <- c(node$Children, list(clone))
+      }
+      return(node)
+    }
+    if (!is.null(node$Children)) {
+      node$Children <- lapply(node$Children, add_clones, path = newpath)
+    }
+    node
+  }
+
+  tpl <- add_clones(tpl)
+  write(toJSON(tpl, auto_unbox = TRUE, null = "null", pretty = TRUE), file)
+}
+clone_calibration_cultivars(file.path(CONFIG$sim_dir, CONFIG$base_file))
+
 ## ── Load and clean observed phenology data ───────────────────
 ## `dat` = one row per observed stage/site/planting-date; merged
 ## with site lat/lon so we can drop a known data-quality issue
@@ -167,19 +236,33 @@ phen.dict <- na.omit(data.frame(
   fc.phen    = c(NA, NA, "VE", "R1", "R3", "R5", NA, NA, "R6", "R7", "R8")
 ))
 
-## Initial parameter guesses by (rounded) maturity group. These
-## are the starting points `optim()` searches from; only mg 4/5/6
-## are used here since those are the only cultivars in production,
-## but the table is kept full-range so it's easy to calibrate more
-## maturity groups later just by editing CONFIG$cultivars.
-apsim.mg.values <- data.frame(
-  mg = 0:8,
-  vegetative            = c(320, 340, 348, 380, 388, 396, 404, 416, 430),
-  early.flowering       = c(100, 120, 120, 120, 140, 160, 180, 200, 200),
-  early.grain           = c(0.467, 0.411, 0.386, 0.361, 0.324, 0.072, 0.056, 0.055, 0.054),
-  late.grain            = c(600, 632, 648, 664, 664, 696, 712, 728, 744),
-  photoperiod.modifier1 = c(14.35, 13.84, 13.59, 13.4, 13.1, 12.83, 12.58, 12.33, 12.07),
-  photoperiod.modifer2  = c(21.11, 18.77, 17.61, 16.91, 16.49, 16.13, 15.8, 15.46, 15.1)
+## Initial parameter guesses, per calibration cultivar. 8 columns:
+## the 6 phenology parameters from before, plus the 2 growth
+## parameters (area.largest.leaf, rue) now optimized alongside them.
+##
+## EarlyMG4/EarlyMG5 starting values are taken directly from
+## Table S1 of supp-mat-06-23-2026.docx (already-calibrated values
+## from the team's own prior optimization run) — reusing them as
+## the starting point should let `optim()` converge quickly if
+## they're already close to optimal, while still re-verifying the
+## fit end-to-end through this pipeline.
+##
+## LateMG4/LateMG5 have no equivalent published starting point yet,
+## so they start from the nearest previous mg-indexed default
+## (apsim.mg.values row mg=4 / mg=5 from the earlier 3-cultivar
+## calibration) for phenology, and the production template's
+## default AreaLargestLeaf/RUE (0.007 / 1.25) for the 2 growth
+## parameters.
+apsim.cultivar.values <- data.frame(
+  cultivar               = c("EarlyMG4", "LateMG4", "EarlyMG5", "LateMG5"),
+  vegetative              = c(484,   388,   634,   396),
+  early.flowering         = c(185,   140,   189,   160),
+  early.grain             = c(0.338, 0.324, 0.042, 0.072),
+  late.grain              = c(384,   664,   418,   696),
+  photoperiod.modifier1   = c(11.48, 13.1,  12.70, 12.83),
+  photoperiod.modifer2    = c(17.24, 16.49, 14.31, 16.13),
+  area.largest.leaf       = c(0.004, 0.007, 0.004, 0.007),
+  rue                     = c(1.48,  1.25,  1.05,  1.25)
 )
 
 ## ── Run one site/year/planting-date combo through APSIM ─────
@@ -312,17 +395,19 @@ metric <- function(predicted_doy, observed_doy) {
 make_objfun <- function(mdat, cultivar.name, cl) {
   function(parms, starting.values) {
     ## `parms` are multipliers on the starting values — this is
-    ## how the original script kept all 6 parameters on a similar
+    ## how the original script kept all parameters on a similar
     ## (~1) scale for Nelder-Mead, despite spanning days, fractions,
-    ## and photoperiod hours.
+    ## photoperiod hours, leaf area (m2), and RUE (g/MJ).
     phen.parms <- parms * starting.values
     ns <- paste(CONFIG$cultivar_root, cultivar.name, sep = ".")
 
     ## Reject parameter sets where late-grain-fill target would be
-    ## shorter than early-grain-fill target — physically invalid.
+    ## shorter than early-grain-fill target, or where either growth
+    ## parameter has gone non-positive — all physically invalid.
     if (phen.parms[6] <= phen.parms[5]) return(NA)
+    if (phen.parms[7] <= 0 || phen.parms[8] <= 0) return(NA)
 
-    ## Push the 6 candidate parameters into the cultivar's Command
+    ## Push the 8 candidate parameters into the cultivar's Command
     ## list in the shared base file (every worker's copy is made
     ## from this file, so editing it here applies to the whole run).
     ## NOTE: "Vegetative.Target" (not just "Vegetative") is required
@@ -330,13 +415,17 @@ make_objfun <- function(mdat, cultivar.name, cl) {
     ## cultivar's Command lines with grepl(), and the bare substring
     ## "Vegetative" also matches "VegetativePhotoperiodModifier",
     ## which makes the match ambiguous and crashes the edit.
+    ## "AreaLargestLeaf" and "RUE" are each unique substrings within
+    ## the cultivar's Command list, so no similar ambiguity there.
     edits <- list(
       list(parm = "Vegetative.Target", value = phen.parms[1]),
       list(parm = "EarlyFlowering", value = phen.parms[2]),
       list(parm = "EarlyGrainFilling", value = phen.parms[3]),
       list(parm = "LateGrainFilling", value = phen.parms[4]),
       list(parm = "ReproductivePhotoperiodModifier",
-           value = paste(phen.parms[5], phen.parms[6], sep = ", "))
+           value = paste(phen.parms[5], phen.parms[6], sep = ", ")),
+      list(parm = "AreaLargestLeaf", value = phen.parms[7]),
+      list(parm = "RUE", value = phen.parms[8])
     )
     for (e in edits) {
       edit_apsimx_replacement(file = CONFIG$base_file, src.dir = CONFIG$sim_dir,
@@ -377,19 +466,20 @@ results <- list()
 
 for (cultivar.name in CONFIG$cultivars) {
 
-  ## Subset observed data to this cultivar's maturity group, and
-  ## build a unique run id per site/year/planting-date combo.
-  mg.tgt <- CONFIG$cultivar_mg[[cultivar.name]]
-  mdat <- subset(dat, round(mg) == mg.tgt)
+  ## Subset observed data to this cultivar's mg2 subclass (early4,
+  ## late4, early5, or late5), and build a unique run id per
+  ## site/year/planting-date combo.
+  mg2.tgt <- CONFIG$cultivar_mg2[[cultivar.name]]
+  mdat <- subset(dat, mg2 == mg2.tgt)
   mdat$year <- as.numeric(strftime(mdat$date, "%Y"))
   mdat$pd <- as.Date(mdat$pd, tryFormats = c("%m/%d/%Y", "%m-%d-%Y"))
   mdat$id <- paste(mdat$site, mdat$year, as.numeric(mdat$pd), sep = "-")
   mdat <- subset(mdat, !is.na(pd))
 
-  ivi <- which(apsim.mg.values$mg == mg.tgt)
-  initial.values <- unlist(apsim.mg.values[ivi, -1])
+  ivi <- which(apsim.cultivar.values$cultivar == cultivar.name)
+  initial.values <- unlist(apsim.cultivar.values[ivi, -1])
 
-  cat("\n==== Calibrating", cultivar.name, "(mg =", mg.tgt, ") ====\n")
+  cat("\n==== Calibrating", cultivar.name, "(mg2 =", mg2.tgt, ") ====\n")
   cat("Observations:", length(unique(mdat$id)), "site/year/planting-date combos\n")
 
   ## One cluster per cultivar, sized to the number of distinct runs
@@ -404,7 +494,7 @@ for (cultivar.name in CONFIG$cultivars) {
     clusterExport(cl, "resolved_exe_path", envir = environment())
     clusterEvalQ(cl, { library(apsimx); apsimx_options(exe.path = resolved_exe_path) })
     objfun <- make_objfun(mdat, cultivar.name, cl)
-    optim(par = rep(1, 6), fn = objfun, method = "Nelder-Mead",
+    optim(par = rep(1, 8), fn = objfun, method = "Nelder-Mead",
           starting.values = initial.values, control = list(maxit = CONFIG$maxit))
   }, error = function(e) {
     message("[ERROR] Calibration failed for ", cultivar.name, ": ", e$message)

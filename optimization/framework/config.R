@@ -41,7 +41,7 @@ CONFIG <- list(
   ## its starting simplex, then more per iteration. Each evaluation
   ## reruns every site. maxit is deliberately modest; raise it on a
   ## faster/more-core machine for a fuller search.
-  maxit  = 15,
+  maxit  = 10,
   method = "Nelder-Mead"
 )
 

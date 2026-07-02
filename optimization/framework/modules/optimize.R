@@ -128,7 +128,7 @@ calibrate_group <- function(group, gdat, cl) {
   apply_params(group, best)
 
   for (stage in STAGES) {
-    n_scalar <- sum(vapply(stage$params, function(pn) PARAMETERS[[pn]]$n, integer(1)))
+    n_scalar <- sum(vapply(stage$params, function(pn) PARAMETERS[[pn]]$n, numeric(1)))
     message(sprintf("  -- stage '%s': optimizing {%s} (%d scalars) against %s",
                     stage$name, paste(stage$params, collapse = ", "), n_scalar,
                     if (stage$target == "phenology") paste(stage$fit_stages, collapse = "/") else "yield"))

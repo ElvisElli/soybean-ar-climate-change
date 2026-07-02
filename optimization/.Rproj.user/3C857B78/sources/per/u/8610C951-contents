@@ -1,7 +1,0 @@
-sfil <- list.files('./simulations/soil/',
-                   full.names = TRUE)
-
-lapply(sfil, function(x){
-  print(x)
-  readRDS(x) |> class() |> print()
-})

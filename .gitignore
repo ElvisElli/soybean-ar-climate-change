@@ -15,3 +15,5 @@ intermediate-data/
 
 # R session files
 .Rhistory
+optimization/simulations/base-simulation.apsimx
+figure-s1/Rplots.pdf

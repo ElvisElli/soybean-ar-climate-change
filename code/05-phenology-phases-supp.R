@@ -184,7 +184,17 @@ plot9a_alt <- make_phase_panel(chg_data, "dcyc", chg_breaks, chg_labels,
 plot9b_alt <- make_phase_panel(chg_data, "dsf", chg_breaks, chg_labels,
                 setNames(div_cols5, chg_labels), "(B)  Seed-filling period change (days)",
                 scenario_levels, scenario_labels, legend_name = NULL)
-plot9_alt <- plot_grid(plot9a_alt, plot9b_alt, ncol = 1, align = "v", axis = "lr")
+## ONE shared legend on top (drop.levels = FALSE so all classes always show).
+shared_leg <- get_legend(
+  make_phase_panel(chg_data, "dcyc", chg_breaks, chg_labels, setNames(div_cols5, chg_labels),
+                   "", scenario_levels, scenario_labels, legend_name = NULL) +
+    scale_fill_manual(values = setNames(div_cols5, chg_labels), drop = FALSE,
+                      na.value = "grey50", na.translate = FALSE, name = NULL) +
+    theme(legend.position = "top", legend.direction = "horizontal"))
+body_alt <- plot_grid(plot9a_alt + theme(legend.position = "none"),
+                      plot9b_alt + theme(legend.position = "none"),
+                      ncol = 1, align = "v", axis = "lr")
+plot9_alt <- plot_grid(shared_leg, body_alt, ncol = 1, rel_heights = c(0.08, 1))
 ggsave("figures/Fig2-alternative-shared-scale.tiff", plot = plot9_alt,
        width = 18, height = 18, units = "cm", dpi = 600, compression = "lzw", bg = "white")
 ggsave("figures/Fig2-alternative-shared-scale.png", plot = plot9_alt,

@@ -98,7 +98,7 @@ map_theme <- theme(
   legend.position = "top", legend.direction = "horizontal",
   legend.title = element_text(size = 11, hjust = 0), strip.text = element_text(size = 10),
   plot.title  = element_text(face = "plain", size = 12, margin = margin(b = 1)),
-  plot.margin = margin(2, 2, 2, 2), panel.spacing = unit(1, "pt"))
+  plot.margin = margin(5, 2, 5, 2), panel.spacing = unit(1, "pt"))
 
 ## One phase map (a phase's field means, faceted over scenarios), pre-binned.
 phase_map <- function(fielddf, var, breaks, labels, title, cols, legend_name = NULL) {
@@ -133,8 +133,13 @@ grid_2x2 <- function(panels, file, ncol_scn) {
 }
 
 ## Stack four phase panels in a single tall column with ONE shared TOP legend.
-stack_1col <- function(panels, file, w = 17, h = 27) {
-  leg  <- get_legend(panels[[1]] + theme(legend.position = "top"))
+## The legend is built from a complete label/colour source (not from a panel) so
+## every class shows even when a given panel has no data in it (e.g. "> 15").
+stack_1col <- function(panels, file, labels, cols, w = 17, h = 28.5) {
+  legdf <- data.frame(x = seq_along(labels), y = 1, bin = factor(labels, levels = labels))
+  leg <- get_legend(ggplot(legdf, aes(x, y, fill = bin)) + geom_tile() +
+    scale_fill_manual(values = setNames(cols, labels), name = NULL, guide = guide_legend(nrow = 1)) +
+    theme(legend.position = "top", legend.direction = "horizontal", legend.title = element_blank()))
   body <- plot_grid(plotlist = lapply(panels, function(p) p + theme(legend.position = "none")),
                     ncol = 1, align = "v", axis = "lr")
   save_fig(plot_grid(leg, body, ncol = 1, rel_heights = c(0.05, 1)), file, w, h)
@@ -153,10 +158,12 @@ grid_2x2(lapply(names(dur_bins), function(v)
 
 chg_breaks <- c(-Inf, 0, 5, 10, 15, Inf)
 chg_labels <- c("< 0", "0 to 5", "5 to 10", "10 to 15", "> 15")
+chg_titles <- c(veg = "(A)  Change in VE-R1 period (days)", erep = "(B)  Change in R1-R5 period (days)",
+                sf  = "(C)  Change in R5-R7 period (days)", cyc  = "(D)  Change in VE-R7 period (days)")
 chg_panel  <- function(v) phase_map(field_chg, paste0("d", v), chg_breaks, chg_labels,
-                                    phase_tag[[v]], div_cols5, "Change vs baseline (days)")
+                                    chg_titles[[v]], div_cols5, legend_name = NULL)
 stack_1col(lapply(c("veg","erep","sf","cyc"), chg_panel),
-           "figures/FigS-phase-duration-change")
+           "figures/FigS-phase-duration-change", labels = chg_labels, cols = div_cols5)
 
 rel_breaks <- c(-Inf, 0, 8, 16, 24, Inf)
 rel_labels <- c("< 0", "0 to 8", "8 to 16", "16 to 24", "> 24")

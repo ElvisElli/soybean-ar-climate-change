@@ -29,7 +29,7 @@
 ## ── 0. Setup (mirrors 02-analysis.R) ─────────────────────────────────────────
 suppressPackageStartupMessages({
   library(ggplot2); library(sf); library(viridis); library(stars)
-  library(dplyr); library(cowplot); library(lubridate)
+  library(dplyr); library(tidyr); library(cowplot); library(lubridate)
 })
 dir.create("figures", showWarnings = FALSE, recursive = TRUE)
 source("code/utils/plot-theme.R")
@@ -77,7 +77,8 @@ to_stars_grid <- function(df, dims) {                 # identical to 02-analysis
 map_theme <- theme(
   axis.title = element_blank(), axis.text = element_blank(),
   legend.position = "top", legend.direction = "horizontal",
-  legend.title = element_text(size = 11, hjust = 0), strip.text = element_text(size = 8))
+  legend.title = element_text(size = 11, hjust = 0), strip.text = element_text(size = 8),
+  plot.title = element_text(face = "plain", size = 12))   # non-bold panel titles
 
 div_cols5 <- c("#b10026", "#e5f5f9", "#99d8c9", "#41ae76", "#005824")  # Fig 2 palette
 seq_cols5 <- viridis(5, option = "D", direction = 1)                    # for durations
@@ -103,36 +104,37 @@ make_phase_panel <- function(data, var, breaks, labels, colors, title,
     map_theme
 }
 
-## Assemble 4 phase panels that SHARE one colour scale into one figure with a
-## single common legend at the bottom.
-save_shared <- function(panels, file, ncol_scn) {
+## Assemble phase panels that SHARE one colour scale into one figure with a
+## single common legend at the bottom. `ncols` = number of panel-columns
+## (2 gives the requested 2x2 grid for four phases).
+save_shared <- function(panels, file, ncol_scn, ncols = 2) {
   leg  <- get_legend(panels[[1]] +
             theme(legend.position = "bottom", legend.direction = "horizontal"))
   bare <- lapply(panels, function(p) p + theme(legend.position = "none"))
-  body <- plot_grid(plotlist = bare, ncol = 1, align = "v", axis = "lr")
-  fig  <- plot_grid(body, leg, ncol = 1, rel_heights = c(length(panels), 0.35))
-  h <- 6 * length(panels) + 1.5
-  ggsave(paste0(file, ".tiff"), fig, width = 6 * ncol_scn, height = h,
+  nrows <- ceiling(length(panels) / ncols)
+  body <- plot_grid(plotlist = bare, ncol = ncols, align = "hv", axis = "tblr")
+  fig  <- plot_grid(body, leg, ncol = 1, rel_heights = c(nrows, 0.4))
+  ggsave(paste0(file, ".tiff"), fig, width = 3.6 * ncol_scn * ncols, height = 6 * nrows + 1.4,
          units = "cm", dpi = 600, compression = "lzw", bg = "white", limitsize = FALSE)
-  ggsave(paste0(file, ".png"),  fig, width = 6 * ncol_scn, height = h,
+  ggsave(paste0(file, ".png"),  fig, width = 3.6 * ncol_scn * ncols, height = 6 * nrows + 1.4,
          units = "cm", dpi = 300, bg = "white", limitsize = FALSE)
   message("[fig] wrote ", file, ".{tiff,png}")
 }
 ## Assemble panels that each keep their OWN legend (for absolute durations,
-## whose ranges differ per phase and cannot share one scale).
-save_perpanel <- function(panels, file, ncol_scn) {
-  fig <- plot_grid(plotlist = panels, ncol = 1, align = "v", axis = "lr")
-  h <- 6.5 * length(panels)
-  ggsave(paste0(file, ".tiff"), fig, width = 6 * ncol_scn, height = h,
+## whose ranges differ per phase and cannot share one scale). Also 2x2.
+save_perpanel <- function(panels, file, ncol_scn, ncols = 2) {
+  nrows <- ceiling(length(panels) / ncols)
+  fig <- plot_grid(plotlist = panels, ncol = ncols, align = "hv", axis = "tblr")
+  ggsave(paste0(file, ".tiff"), fig, width = 3.6 * ncol_scn * ncols, height = 6.8 * nrows,
          units = "cm", dpi = 600, compression = "lzw", bg = "white", limitsize = FALSE)
-  ggsave(paste0(file, ".png"),  fig, width = 6 * ncol_scn, height = h,
+  ggsave(paste0(file, ".png"),  fig, width = 3.6 * ncol_scn * ncols, height = 6.8 * nrows,
          units = "cm", dpi = 300, bg = "white", limitsize = FALSE)
   message("[fig] wrote ", file, ".{tiff,png}")
 }
 
 ## ── 3. Long-format data + change vs baseline (per field-year) ────────────────
 dur_data <- simulated0 %>% filter(co2 == 350 | scenario == "baseline") %>%
-  select(x, y, date, scenario, veg, erep, sf, cyc)
+  select(x, y, date, scenario, veg, erep, sf, cyc, Yield_kgha)
 
 bl <- simulated0 %>% filter(scenario == "baseline") %>%
   select(x, y, date, bveg = veg, berep = erep, bsf = sf, bcyc = cyc, byld = Yield_kgha)
@@ -170,6 +172,34 @@ chg_panels <- lapply(c("dveg","derep","dsf","dcyc"), function(v) {
                    legend_name = "Change vs baseline (days)")
 })
 save_shared(chg_panels, "figures/FigS-phase-duration-change", ncol_scn = 4)
+
+## ── 4b-bis. ALTERNATIVE Figure 2 — the two Fig-2 phases on the shared scale ───
+## Same two phases and EXACT same layout/output as the main Fig 2 in
+## 02-analysis.R (two stacked panels, per-panel top legend, 18x18 cm, 600 dpi
+## lzw TIFF), but on the single updated shared change scale. The "(A)/(B)"
+## descriptive panel text is kept as the panel title; the legend has no title.
+plot9a_alt <- make_phase_panel(chg_data, "dcyc", chg_breaks, chg_labels,
+                setNames(div_cols5, chg_labels), "(A)  Total crop cycle change (days)",
+                scenario_levels, scenario_labels, legend_name = NULL)
+plot9b_alt <- make_phase_panel(chg_data, "dsf", chg_breaks, chg_labels,
+                setNames(div_cols5, chg_labels), "(B)  Seed-filling period change (days)",
+                scenario_levels, scenario_labels, legend_name = NULL)
+## ONE shared legend on top (drop.levels = FALSE so all classes always show).
+shared_leg <- get_legend(
+  make_phase_panel(chg_data, "dcyc", chg_breaks, chg_labels, setNames(div_cols5, chg_labels),
+                   "", scenario_levels, scenario_labels, legend_name = NULL) +
+    scale_fill_manual(values = setNames(div_cols5, chg_labels), drop = FALSE,
+                      na.value = "grey50", na.translate = FALSE, name = NULL) +
+    theme(legend.position = "top", legend.direction = "horizontal"))
+body_alt <- plot_grid(plot9a_alt + theme(legend.position = "none"),
+                      plot9b_alt + theme(legend.position = "none"),
+                      ncol = 1, align = "v", axis = "lr")
+plot9_alt <- plot_grid(shared_leg, body_alt, ncol = 1, rel_heights = c(0.08, 1))
+ggsave("figures/Fig2-alternative-shared-scale.tiff", plot = plot9_alt,
+       width = 18, height = 18, units = "cm", dpi = 600, compression = "lzw", bg = "white")
+ggsave("figures/Fig2-alternative-shared-scale.png", plot = plot9_alt,
+       width = 18, height = 18, units = "cm", dpi = 300, bg = "white")
+message("[fig] wrote figures/Fig2-alternative-shared-scale.{tiff,png}")
 
 ## ── 4c. FIGURE 3 — relative change vs baseline (%), SHARED scale ──────────────
 rel_breaks <- c(-Inf, 0, 8, 16, 24, Inf)
@@ -253,4 +283,65 @@ ggsave("figures/FigS-phase-variance-contribution.png", pbar, width = 16, height 
        units = "cm", dpi = 300, bg = "white")
 message("[fig] wrote figures/FigS-phase-variance-contribution.{tiff,png}")
 
-cat("\n[done] wrote 4 figures to figures/FigS-phase-*.{tiff,png}\n")
+## ── 6. Average magnitude of the NEGATIVE (shortening) changes, per phase ─────
+## For each phase x scenario, restricted to field-years where the change is
+## negative: the mean shortening magnitude (|days|) and the % of field-years
+## that shorten. Reported at the field-year level (CO2 = 350).
+cat(paste(rep("=", 78), collapse = ""), "\n")
+cat("AVERAGE MAGNITUDE OF NEGATIVE (SHORTENING) CHANGES, days, CO2=350\n")
+cat("  mean_abs_neg = mean |change| over shortening field-years; pct_neg = % shortening\n")
+cat(paste(rep("-", 78), collapse = ""), "\n")
+neg_mag <- function(v) {
+  chg_data %>%
+    mutate(scenario = factor(scenario, levels = scenario_levels, labels = scenario_labels)) %>%
+    group_by(scenario) %>%
+    summarise(mean_abs_neg = round(mean(abs(.data[[v]][.data[[v]] < 0]), na.rm = TRUE), 2),
+              pct_neg      = round(100 * mean(.data[[v]] < 0, na.rm = TRUE), 1), .groups = "drop")
+}
+for (v in c("dveg","derep","dsf","dcyc")) {
+  cat("\nPhase ", phase_tag[[sub("^d","",v)]], ":\n", sep = "")
+  print(as.data.frame(neg_mag(v)))
+}
+cat(paste(rep("=", 78), collapse = ""), "\n")
+
+## ── 7. Correlation plots: yield vs each phase duration (all scenarios) ───────
+## Absolute yield against absolute phase duration, ALL scenarios (incl. baseline)
+## in a single panel per phase, coloured by scenario, with one overall linear fit
+## and the pooled Pearson r annotated. Points sub-sampled for legibility; r and
+## the fit are computed on the FULL data.
+sc_all_lev <- dur_levels; sc_all_lab <- dur_labels
+sc_cols <- setNames(c("grey40", "#b2182b", "#2166ac", "#1b7837", "#762a83"), sc_all_lab)
+phase_axis <- c(veg = "Vegetative VE-R1 (days)", erep = "Early reproductive R1-R5 (days)",
+                sf = "Seed filling R5-R7 (days)", cyc = "Whole crop cycle VE-R7 (days)")
+
+set.seed(1)
+corr_long <- dur_data %>%
+  mutate(scenario = factor(scenario, levels = sc_all_lev, labels = sc_all_lab)) %>%
+  tidyr::pivot_longer(c(veg, erep, sf, cyc), names_to = "phase", values_to = "dur")
+corr_long$phase <- factor(corr_long$phase, levels = c("veg","erep","sf","cyc"),
+                          labels = phase_axis)
+## Pearson r (full data) per phase, for the annotation.
+rlab <- corr_long %>% group_by(phase) %>%
+  summarise(r = cor(dur, Yield_kgha, use = "complete.obs"),
+            x = min(dur, na.rm = TRUE), .groups = "drop") %>%
+  mutate(label = sprintf("r = %.2f", r))
+plot_pts <- corr_long %>% group_by(phase) %>% slice_sample(n = 6000) %>% ungroup()
+
+pcorr <- ggplot(plot_pts, aes(dur, Yield_kgha)) +
+  geom_point(aes(colour = scenario), alpha = 0.25, size = 0.5) +
+  geom_smooth(method = "lm", se = FALSE, colour = "black", linewidth = 0.8) +
+  geom_text(data = rlab, aes(x = x, y = Inf, label = label),
+            hjust = -0.1, vjust = 1.4, size = 3.5, inherit.aes = FALSE) +
+  facet_wrap(~ phase, scales = "free_x", nrow = 2) +
+  scale_colour_manual(values = sc_cols, name = NULL) +
+  guides(colour = guide_legend(override.aes = list(alpha = 1, size = 2))) +
+  labs(x = "Phase duration (days)", y = "Simulated seed yield (kg/ha)",
+       title = "Seed yield vs phenological-phase duration (all scenarios)") +
+  theme_bw(base_size = 12) + theme(legend.position = "top")
+ggsave("figures/FigS-yield-phase-correlation.tiff", pcorr, width = 20, height = 16,
+       units = "cm", dpi = 600, compression = "lzw", bg = "white")
+ggsave("figures/FigS-yield-phase-correlation.png", pcorr, width = 20, height = 16,
+       units = "cm", dpi = 300, bg = "white")
+message("[fig] wrote figures/FigS-yield-phase-correlation.{tiff,png}")
+
+cat("\n[done] wrote 6 figures to figures/{FigS-phase-*, Fig2-alternative-*, FigS-yield-phase-*}.{tiff,png}\n")

@@ -174,16 +174,22 @@ chg_panels <- lapply(c("dveg","derep","dsf","dcyc"), function(v) {
 save_shared(chg_panels, "figures/FigS-phase-duration-change", ncol_scn = 4)
 
 ## ── 4b-bis. ALTERNATIVE Figure 2 — the two Fig-2 phases on the shared scale ───
-## Same two phases as the main Fig 2 (A = total crop cycle, B = seed-filling),
-## but on the single updated shared change scale, non-bold titles, one legend.
-fig2_panels <- list(
-  make_phase_panel(chg_data, "dcyc", chg_breaks, chg_labels, setNames(div_cols5, chg_labels),
-                   "(A)  Total crop cycle (VE-R7)", scenario_levels, scenario_labels,
-                   legend_name = "Change vs baseline (days)"),
-  make_phase_panel(chg_data, "dsf",  chg_breaks, chg_labels, setNames(div_cols5, chg_labels),
-                   "(B)  Seed-filling period (R5-R7)", scenario_levels, scenario_labels,
-                   legend_name = "Change vs baseline (days)"))
-save_shared(fig2_panels, "figures/Fig2-alternative-shared-scale", ncol_scn = 4, ncols = 1)
+## Same two phases and EXACT same layout/output as the main Fig 2 in
+## 02-analysis.R (two stacked panels, per-panel top legend, 18x18 cm, 600 dpi
+## lzw TIFF), but on the single updated shared change scale. The "(A)/(B)"
+## descriptive panel text is kept as the panel title; the legend has no title.
+plot9a_alt <- make_phase_panel(chg_data, "dcyc", chg_breaks, chg_labels,
+                setNames(div_cols5, chg_labels), "(A)  Total crop cycle change (days)",
+                scenario_levels, scenario_labels, legend_name = NULL)
+plot9b_alt <- make_phase_panel(chg_data, "dsf", chg_breaks, chg_labels,
+                setNames(div_cols5, chg_labels), "(B)  Seed-filling period change (days)",
+                scenario_levels, scenario_labels, legend_name = NULL)
+plot9_alt <- plot_grid(plot9a_alt, plot9b_alt, ncol = 1, align = "v", axis = "lr")
+ggsave("figures/Fig2-alternative-shared-scale.tiff", plot = plot9_alt,
+       width = 18, height = 18, units = "cm", dpi = 600, compression = "lzw", bg = "white")
+ggsave("figures/Fig2-alternative-shared-scale.png", plot = plot9_alt,
+       width = 18, height = 18, units = "cm", dpi = 300, bg = "white")
+message("[fig] wrote figures/Fig2-alternative-shared-scale.{tiff,png}")
 
 ## ── 4c. FIGURE 3 — relative change vs baseline (%), SHARED scale ──────────────
 rel_breaks <- c(-Inf, 0, 8, 16, 24, Inf)

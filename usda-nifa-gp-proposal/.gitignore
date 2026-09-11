@@ -8,8 +8,10 @@
 *.Rout
 *.png
 *.pdf
+*.tiff
 
-# Generated data files (keep CSVs in repo, but exclude temp data)
+# Generated data files (exclude weather data and temp files)
+weather_data_*.csv
 *.tmp
 *.temp
 

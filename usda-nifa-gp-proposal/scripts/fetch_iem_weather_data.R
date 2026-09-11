@@ -83,8 +83,9 @@ for (loc_idx in seq_len(nrow(locations))) {
       sow_doy <- sowing_dates[[sow_idx]]
 
       # Extract 130-day growing season
-      scenario_data <- power_data %>%
-        as_tibble() %>%
+      # Note: apsimx already converts NASA POWER columns:
+      # T2MX→maxt, T2MN→mint, PREC→rain, ALLSKY_SFC_SW_DWN→radn (in MJ/m²/day)
+      scenario_data <- as.data.frame(power_data) %>%
         filter((day >= sow_doy & day <= sow_doy + 129) |
                (sow_doy + 129 > 365 & (day >= sow_doy | day <= sow_doy + 129 - 365))) %>%
         mutate(
@@ -93,11 +94,7 @@ for (loc_idx in seq_len(nrow(locations))) {
           scenario = paste0(loc$location, " - ", sow_name),
           sowing_date = sow_name,
           sowing_doy = sow_doy,
-          source = "NASA POWER",
-          maxt = T2MX,
-          mint = T2MN,
-          rain = PREC,
-          radn = ALLSKY_SFC_SW_DWN / 100  # Convert to MJ/m²/day
+          source = "NASA POWER"
         ) %>%
         select(date, year, day, radn, maxt, mint, rain, location, scenario,
                sowing_date, sowing_doy, source)

@@ -10,8 +10,9 @@
 *.pdf
 *.tiff
 
-# Generated data files (exclude weather data and temp files)
+# Generated data files (exclude weather data, plot data, and temp files)
 weather_data_*.csv
+plot_data_*.csv
 *.tmp
 *.temp
 

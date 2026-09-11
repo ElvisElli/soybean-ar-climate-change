@@ -86,7 +86,7 @@ usda-nifa-gp-proposal/
 
 ## Quick Start Workflows
 
-### Workflow 1: Synthetic Data (Fastest)
+### Workflow 1: Synthetic Data (Fastest, No Internet Required)
 **Time**: ~2 seconds
 ```r
 source("scripts/create_temperature_data.R")        # Step 1: Generate data
@@ -94,8 +94,16 @@ source("scripts/gxe_variation_figure_with_range.R") # Step 2: Create figure
 ```
 **Output**: `figures/gxe_environmental_variation_real_data.tiff`
 
-### Workflow 2: Real NASA POWER Data
-**Time**: 5-15 minutes (includes download time)
+### Workflow 2: Real IEM Weather Data (Recommended)
+**Time**: 2-5 minutes (includes IEM download, automatic fallback to synthetic if unavailable)
+```r
+source("scripts/fetch_iem_weather_data.R")              # Step 1: Download IEM 2010-2024 data
+source("scripts/gxe_variation_figure_with_iem_data.R")  # Step 2: Create figure
+```
+**Output**: `figures/gxe_environmental_variation_iem.tiff`
+
+### Workflow 3: Real NASA POWER Data (Alternative)
+**Time**: 5-15 minutes (includes download time, may fail if API unavailable)
 ```r
 source("scripts/fetch_nasa_power_2010_2025.R")        # Step 1: Download 2010-2025 data
 source("scripts/gxe_variation_figure_with_nasa_data.R") # Step 2: Create figure

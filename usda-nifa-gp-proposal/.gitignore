@@ -1,0 +1,32 @@
+# RStudio project files
+.Rproj.user/
+.Rhistory
+.RData
+.Ruserdata
+
+# R output files
+*.Rout
+*.png
+*.pdf
+
+# Generated data files (keep CSVs in repo, but exclude temp data)
+*.tmp
+*.temp
+
+# macOS
+.DS_Store
+.Rapp.history
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS-specific
+Thumbs.db
+
+# Package files
+*.tar.gz
+*.zip

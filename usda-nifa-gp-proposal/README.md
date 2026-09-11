@@ -23,16 +23,17 @@ usda-nifa-gp-proposal/
 
 ## Quick Start
 
-### Generate Figure with Synthetic Data (Local Machine)
+### Option 1: Generate Figure with Synthetic Data (Fastest)
 ```r
-source("scripts/gxe_variation_figure_with_range.R")
+Rscript scripts/create_temperature_data.R           # Generate data (1 sec)
+Rscript scripts/gxe_variation_figure_with_range.R   # Create figure (1 sec)
 ```
-**Output:** `figures/gxe_environmental_variation_real_data.tiff`
+**Output:** `figures/gxe_environmental_variation_real_data.tiff` (publication-ready)
 
-### Download Real NASA POWER Data & Generate Figure (Local Machine)
+### Option 2: Download Real NASA POWER Data & Generate Figure
 ```r
-source("scripts/fetch_nasa_power_2010_2025.R")
-source("scripts/gxe_variation_figure_with_nasa_data.R")
+Rscript scripts/fetch_nasa_power_2010_2025.R        # Download 2010-2025 data (5-15 min)
+Rscript scripts/gxe_variation_figure_with_nasa_data.R  # Create figure (1 sec)
 ```
 **Output:** NASA-averaged daily temperatures (2010-2025) + figure
 
@@ -44,7 +45,7 @@ source("scripts/gxe_variation_figure_with_nasa_data.R")
 
 | File | Purpose |
 |------|---------|
-| `create_temperature_data.py` | Generate synthetic climate-realistic daily weather (130-day seasons) |
+| `create_temperature_data.R` | Generate synthetic climate-realistic daily weather (130-day seasons) |
 | `fetch_nasa_power_2010_2025.R` | Download & average 16 years NASA POWER temperature data |
 | `fetch_40years_nasa_power.R` | Alternative: fetch 40 years NASA POWER data (1985-2024) |
 | `gxe_variation_figure_with_range.R` | Create figure with synthetic/processed data |
@@ -136,11 +137,7 @@ source("scripts/gxe_variation_figure_with_nasa_data.R")
 
 ## System Requirements
 
-### For Synthetic Data (Python)
-- Python 3.7+
-- csv, datetime, math, random (standard library)
-
-### For Data Processing & Figures (R)
+### All Operations (R)
 - R 4.0+
 - Packages: dplyr, tidyr, ggplot2, patchwork, lubridate
 - Optional: nasapower (for real NASA data)
@@ -151,8 +148,8 @@ source("scripts/gxe_variation_figure_with_nasa_data.R")
 
 1. **Local machine workflow**:
    - Modify sowing dates/locations in scripts as needed
-   - Run Python script first to generate synthetic data
-   - Run R figure script to create visualization
+   - Run `create_temperature_data.R` to generate synthetic data
+   - Run `gxe_variation_figure_with_range.R` to create visualization
 
 2. **Reproducibility**:
    - All scripts include random seeds (set.seed/random.seed)

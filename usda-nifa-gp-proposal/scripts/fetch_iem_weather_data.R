@@ -1,7 +1,5 @@
 ## ============================================================
 ## Fetch real weather data from NASA POWER via apsimx package
-## Fallback to synthetic data if NASA POWER unavailable
-## Robust approach based on apsim-arkansas-grid/scripts/01_download_met_soil.R
 ## ============================================================
 
 suppressPackageStartupMessages({
@@ -60,74 +58,10 @@ fetch_nasapower_data <- function(lonlat, dates, location_name) {
   })
 }
 
-## ── Fallback: Generate synthetic data ────────────────────────
-generate_synthetic_data <- function(lonlat, location_name, lat_deg) {
-  cat(sprintf("  Generating synthetic climate data for %s...\n", location_name))
-
-  set.seed(42)
-
-  # Regional climate parameters
-  if (grepl("Fayetteville", location_name)) {
-    seasonal_mean <- 24.8
-    amplitude <- 8.5
-    noise_sd <- 2.5
-  } else {
-    seasonal_mean <- 23.2
-    amplitude <- 9.0
-    noise_sd <- 2.8
-  }
-
-  all_scenario_data <- NULL
-
-  for (sow_idx in seq_along(sowing_dates)) {
-    sow_name <- names(sowing_dates)[sow_idx]
-    sow_doy <- sowing_dates[[sow_idx]]
-
-    # Create 130-day growing season
-    start_date <- as.Date(paste0("2023-", sow_doy), "%Y-%j")
-    date_seq <- seq(start_date, by = "1 day", length.out = 130)
-
-    scenario_data <- tibble(
-      date = date_seq,
-      year = year(date_seq),
-      day = yday(date_seq),
-      radn = 20,  # Average radiation (MJ/m²/day)
-      maxt = NA_real_,
-      mint = NA_real_,
-      rain = 0
-    )
-
-    # Generate temperatures
-    for (i in seq_len(nrow(scenario_data))) {
-      doy <- scenario_data$day[i]
-      season_phase <- pmin(pmax((doy - 105) / 180 * pi, 0), pi)
-      seasonal_t <- seasonal_mean + amplitude * sin(season_phase)
-      daily_noise <- rnorm(1, 0, noise_sd)
-      mean_t <- seasonal_t + daily_noise
-
-      scenario_data$maxt[i] <- mean_t + 4.5
-      scenario_data$mint[i] <- mean_t - 4.5
-    }
-
-    scenario_data <- scenario_data %>%
-      mutate(
-        location = location_name,
-        scenario = paste0(location_name, " - ", sow_name),
-        sowing_date = sow_name,
-        sowing_doy = sow_doy,
-        source = "synthetic"
-      )
-
-    all_scenario_data <- bind_rows(all_scenario_data, scenario_data)
-  }
-
-  cat(sprintf("    ✓ Generated %d days of synthetic data\n", nrow(all_scenario_data)))
-  return(all_scenario_data)
-}
 
 ## ── Main workflow ────────────────────────────────────────────
 cat("========================================================================\n")
-cat("Fetching weather data: NASA POWER (primary) → Synthetic fallback\n")
+cat("Fetching weather data from NASA POWER (via apsimx)\n")
 cat("========================================================================\n\n")
 
 all_data <- NULL
@@ -151,14 +85,10 @@ for (loc_idx in seq_len(nrow(locations))) {
       # Extract 130-day growing season
       scenario_data <- power_data %>%
         as_tibble() %>%
-        mutate(
-          day = yday(as.Date(YYYYMMDD, "%Y%m%d")),
-          year = year(as.Date(YYYYMMDD, "%Y%m%d")),
-          date = as.Date(YYYYMMDD, "%Y%m%d")
-        ) %>%
         filter((day >= sow_doy & day <= sow_doy + 129) |
                (sow_doy + 129 > 365 & (day >= sow_doy | day <= sow_doy + 129 - 365))) %>%
         mutate(
+          date = as.Date(paste0(year, "-", day), "%Y-%j"),
           location = loc$location,
           scenario = paste0(loc$location, " - ", sow_name),
           sowing_date = sow_name,
@@ -177,11 +107,6 @@ for (loc_idx in seq_len(nrow(locations))) {
       }
     }
     cat("  ✓ NASA POWER data processed\n\n")
-  } else {
-    # NASA POWER failed - use synthetic fallback
-    synthetic <- generate_synthetic_data(lonlat, loc$location, loc$lat)
-    all_data <- bind_rows(all_data, synthetic)
-    cat("\n")
   }
 }
 
@@ -238,4 +163,4 @@ source_count <- table(result_data$source)
 print(source_count)
 
 cat("\n========================================================================\n")
-cat("Next: Run gxe_variation_figure_with_real_weather.R\n")
+cat("Next: Run gxe_variation_figure_with_iem_data.R\n")
